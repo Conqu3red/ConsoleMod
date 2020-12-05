@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>Console_Cinematic_Camera_Mod</RootNamespace>
+  </PropertyGroup>
+	
+	<ItemGroup>
+		<Reference Include="BepInEx">
+			<HintPath>../Poly Bridge 2/BepInEx/core/BepInEx.dll</HintPath>
+		</Reference>
+		<Reference Include="Assembly-CSharp">
+			<HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/Assembly-CSharp.dll</HintPath>
+		</Reference>
+		<Reference Include="HarmonyX">
+			<HintPath>../Poly Bridge 2/BepInEx/core/0Harmony.dll</HintPath>
+		</Reference>
+		<Reference Include="BepInEx.Harmony">
+			<HintPath>../Poly Bridge 2/BepInEx/core/BepInEx.Harmony.dll</HintPath>
+		</Reference>
+		<Reference Include="PolyTechFramework">
+			<HintPath>../Poly Bridge 2/BepInEx/plugins/PolyTechFramework.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine">
+			<HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/UnityEngine.dll</HintPath>
+		</Reference>
+		<Reference Include="UnityEngine.CoreModule">
+			<HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
+		</Reference>
+		<Reference Include="ConfigurationManager">
+			<HintPath>../Poly Bridge 2/BepInEx/plugins/ConfigurationManager.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+</Project>
