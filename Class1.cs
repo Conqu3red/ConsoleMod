@@ -24,7 +24,6 @@ namespace ConsoleMod
 			modEnabledDef = new ConfigDefinition("Console", "Enabled");
 		public static ConfigEntry<bool>
 			modEnabled;
-		public static bool _enabled = true;//modEnabled.Value;
 		void Awake()
 		{
 			// Use this if you wish to make the mod trigger cheat mode ingame.
@@ -32,14 +31,12 @@ namespace ConsoleMod
 			this.isCheat = false;
 			// Set this to whether the mod is currently enabled or not.
 			// Usually you want this to be true by default.
-			this.isEnabled = true;
 
 
 			// Register the mod to PTF, that way it will be able to be configured using PTF ingame.
 
 			modEnabled = Config.Bind(modEnabledDef, true, new ConfigDescription("Enable Mod"));
 			modEnabled.SettingChanged += onEnableDisable;
-			_enabled = modEnabled.Value;
 
 			harmony = new Harmony("org.bepinex.plugins.ConsoleCinematicCamera");
 			harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -102,7 +99,7 @@ namespace ConsoleMod
         {
 			 static void Prefix ()
             {
-				if (uConsole.IsOn() && !_enabled)
+				if (uConsole.IsOn() && !modEnabled.Value)
                 {
 					uConsole.TurnOff();
                 }
@@ -113,13 +110,11 @@ namespace ConsoleMod
 		public override void enableMod() 
 		{
 			//Logger.LogInfo("Enabled!");
-			_enabled = true;
 		}
 		// Use this method to execute code that will be ran when the mod is disabled.
 		public override void disableMod() 
 		{
 			//Logger.LogInfo("Disabled!");
-			_enabled = false;
 		}
 
 		// I have no idea how either of this functions work,
