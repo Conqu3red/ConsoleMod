@@ -25,7 +25,6 @@ namespace ConsoleMod
 		public static ConfigEntry<bool>
 			modEnabled;
 		public static bool _enabled = true;//modEnabled.Value;
-		public static bool failed_explode = false;
 		void Awake()
 		{
 			// Use this if you wish to make the mod trigger cheat mode ingame.
@@ -107,48 +106,6 @@ namespace ConsoleMod
                 {
 					uConsole.TurnOff();
                 }
-            }
-        }
-		[HarmonyPatch(typeof(GameStateSim))]
-		[HarmonyPatch("SetLevelFailedReasonText")]
-		public class PatchLevelFail
-        {
-			public static void Postfix(global::Vehicle vehicle)
-			{
-				if (ConsoleMod.failed_explode == true)
-				{
-					string vehicleNameColorized = string.Format(
-						"{0}{1} {2}</color>",
-						Utils.ColorToHex(GameUI.m_Instance.m_YellowTextColor),
-						Localize.Get(vehicle.m_DisplayNameLocKey),
-						vehicle.GetTextMeshString()
-					);
-					GameUI.m_Instance.m_LevelFailed.SetFailReasonText(vehicleNameColorized + " Caught fire and exploded.");
-					ConsoleMod.failed_explode = false;
-				}
-			}
-        }
-		[HarmonyPatch(typeof(Vehicle))]
-		[HarmonyPatch("FixedUpdateManual")]
-		public class PatchVehicle
-        {
-			public static void Postfix(Vehicle __instance)
-            {
-				//Debug.Log(__instance.Speed.ToString());
-				if (__instance.Speed > 15.0)
-                {
-					//Debug.Log("explode");
-					GameStateSim.m_LevelFailed = true;
-					ConsoleMod.failed_explode = true;
-					string vehicleNameColorized = string.Format(
-						"{0}{1} {2}</color>",
-						Utils.ColorToHex(GameUI.m_Instance.m_YellowTextColor),
-						Localize.Get(__instance.m_DisplayNameLocKey),
-						__instance.GetTextMeshString()
-					);
-					GameUI.m_Instance.m_LevelFailed.SetFailReasonText(vehicleNameColorized + " Caught fire and exploded.");
-
-				}
             }
         }
 
