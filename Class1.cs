@@ -78,7 +78,7 @@ namespace ConsoleMod
                 uConsole.UnRegisterCommand("version");
                 uConsole.RegisterCommand("version", "show uConsole version", new uConsole.DebugCommand(mod_ver));
 
-                uConsole.RegisterCommand("popup", new uConsole.DebugCommand(popup));
+                uConsole.RegisterCommand("popup_test", new uConsole.DebugCommand(popup_test));
                 
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
                 uConsole.RegisterCommand("bridge_reveal", new uConsole.DebugCommand(bridge_reveal));
@@ -141,13 +141,36 @@ namespace ConsoleMod
             uConsole.Log("Mod Created by Conqu3red");
         }
 
-        private static void popup() 
+        private static void popup_test() 
         {
-            if (uConsole.GetNumParameters() == 1)
+            PopUpMessage.DisplayOkOnly("PopUpMessage 1", null);
+            PopUpMessage.DisplayOkOnly("PopUpMessage 2 ", null);
+            PopUpWarning.Display("PopUpWarning");
+            PopUpMessage.Display("PopUpMessage with cancel button", null, 
+            () => 
             {
-                
-                PopUpMessage.DisplayOkOnly(uConsole.GetString(), null);
-            }
+                return;
+            });
+            PopUpTwoChoices.Display(
+                "PopUpTwoChoices",
+                "aaa",
+                "bbb",
+                () => 
+            {
+                return;
+            },
+            () => 
+            {
+                return;
+            });
+            PopupInputField.Display(
+                "PopUpInputField",
+                "default",
+                (result) => 
+                {
+                    return;
+                }
+            );
         }
 
         private static void bridge_hide()
