@@ -5,7 +5,9 @@ using PolyTechFramework;
 using UnityEngine;
 using HarmonyLib;
 using System.Reflection;
+using System.Collections.Generic;
 using BepInEx.Configuration;
+using PolyPhysics.Viewers;
 
 namespace ConsoleMod
 {
@@ -24,11 +26,14 @@ namespace ConsoleMod
             modEnabledDef = new ConfigDefinition("Console", "Enabled");
         public static ConfigEntry<bool>
             modEnabled;
+
+        public static ConsoleMod instance;
         void Awake()
         {
+            if (instance == null) instance = this;
             // Use this if you wish to make the mod trigger cheat mode ingame.
             // Set this true if your mod effects physics or allows mods that you can't normally do.
-            this.isCheat = false;
+            isCheat = false;
             // Set this to whether the mod is currently enabled or not.
             // Usually you want this to be true by default.
 
@@ -42,6 +47,7 @@ namespace ConsoleMod
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             Logger.LogInfo("Console Initiated.");
             // ConsoleCommands.Init();
+            
             PolyTechMain.registerMod(this);
 
             
@@ -79,7 +85,23 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("version", "show uConsole version", new uConsole.DebugCommand(mod_ver));
 
                 uConsole.RegisterCommand("popup_test", new uConsole.DebugCommand(popup_test));
+                uConsole.RegisterCommand("set_cheat", new uConsole.DebugCommand(toggleCheat));
                 
+                // modded Cinematic Camera
+                uConsole.RegisterCommand("cin_add", new uConsole.DebugCommand(cin_add));
+                uConsole.RegisterCommand("cin_delete", new uConsole.DebugCommand(cin_delete));
+                uConsole.RegisterCommand("cin_modify", new uConsole.DebugCommand(cin_modify));
+                uConsole.RegisterCommand("cin_restore", new uConsole.DebugCommand(cin_restore));
+                uConsole.RegisterCommand("cin_list", new uConsole.DebugCommand(cin_log));
+                
+                
+                // z modifiers 
+                
+                uConsole.RegisterCommand("set_z", new uConsole.DebugCommand(set_z));
+                uConsole.RegisterCommand("set_z_scale", new uConsole.DebugCommand(set_z_scale));
+                uConsole.RegisterCommand("shuffle_z", new uConsole.DebugCommand(shuffle_z));
+
+
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
                 uConsole.RegisterCommand("bridge_reveal", new uConsole.DebugCommand(bridge_reveal));
                 uConsole.RegisterCommand("cam_info", new uConsole.DebugCommand(cam_info));
@@ -141,16 +163,69 @@ namespace ConsoleMod
             uConsole.Log("Mod Created by Conqu3red");
         }
 
+        private static void toggleCheat(){
+            bool val = uConsole.GetBool();
+            PolyTechMain.setCheat(instance, val);
+            PopUpMessage.DisplayOkOnly("Set Console mod cheat? to " + val.ToString(), null);
+        }
+
+
+        private static void set_z(){
+            float z = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y, z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+        private static void shuffle_z(){
+            float z_start = 5f;
+            float z_end = 100f;
+            float z;
+            if (uConsole.GetNumParameters() == 2){
+                z_start = uConsole.GetFloat();
+                z_end = uConsole.GetFloat();
+            }
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    z = UnityEngine.Random.Range(z_start, z_end);
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y, z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+        private static void set_z_scale(){
+            float z = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_scale = component.gameObject.transform.localScale.ToString();
+                    Vector3 new_scale = new Vector3(component.gameObject.transform.localScale.x, component.gameObject.transform.localScale.y, z);
+                    component.gameObject.transform.localScale = new_scale;
+                    
+                    uConsole.Log(orig_scale + " -> " + component.gameObject.transform.localScale.ToString());
+                }
+
+            }
+        }
         private static void popup_test() 
         {
-            PopUpMessage.DisplayOkOnly("PopUpMessage 1", null);
-            PopUpMessage.DisplayOkOnly("PopUpMessage 2 ", null);
+            GameUI.ShowMessage(ScreenMessageLocation.TOP_LEFT, "hey", 5f);
+            PopUpMessage.DisplayOkOnly("ok only", null);
+            PopUpMessage.Display("ok and cancel", null, () => {});
             PopUpWarning.Display("PopUpWarning");
-            PopUpMessage.Display("PopUpMessage with cancel button", null, 
-            () => 
-            {
-                return;
-            });
             PopUpTwoChoices.Display(
                 "PopUpTwoChoices",
                 "aaa",
@@ -168,7 +243,7 @@ namespace ConsoleMod
                 "default",
                 (result) => 
                 {
-                    return;
+                    uConsole.Log("You typed: "+ result);
                 }
             );
         }
@@ -218,7 +293,196 @@ namespace ConsoleMod
             ));
         }
 
-        // Token: 0x060058DF RID: 22751
+        public class CameraKeyFrame {
+            public Vector3 m_StartPos;
+		    public Quaternion m_StartRot;
+		    public Vector3 m_StartPivot;
+		    public float m_StartOrthographicSize;
+            public float m_DurationSeconds = 5;
+            public bool m_Ease = false;
+
+        }
+        public static class ModdedCinemaCamera {
+            public static List<CameraKeyFrame> keyFrames = new List<CameraKeyFrame> ();
+            public static int current_start = 0;
+            public static int current_end = 1;
+
+            public static CatmullRomSpline InterpolateHandler = new CatmullRomSpline();
+            public static CameraKeyFrame currentCamera(){
+                CameraKeyFrame cam = new CameraKeyFrame();
+                cam.m_StartPos = Cameras.MainCamera().transform.position;
+		        cam.m_StartRot = Cameras.MainCamera().transform.rotation;
+		        cam.m_StartPivot = PointsOfView.m_Pivot;
+		        cam.m_StartOrthographicSize = Cameras.GetOrthographicSize();
+                return cam;
+            }
+
+            public static void StartInterpolate(){
+                restore(current_start);
+                CameraKeyFrame target = keyFrames[current_end];
+			    CameraInterpolate.SlerpTo(
+                    target.m_StartPivot, 
+                    target.m_StartPos, 
+                    target.m_StartRot, 
+                    target.m_StartOrthographicSize, 
+                    target.m_DurationSeconds, 
+                    target.m_Ease
+                );
+            }
+            public static void restore(int pos){
+                CameraKeyFrame cam = keyFrames[pos];
+                Cameras.MainCamera().transform.position = cam.m_StartPos;
+		        Cameras.MainCamera().transform.rotation = cam.m_StartRot;
+		        PointsOfView.UpdatePivotBasedOnCamera();
+		        Cameras.SetOrthographicSize(cam.m_StartOrthographicSize);
+            }
+        }
+        [HarmonyPatch(typeof(CinemaCamera), "StartInterpolate")]
+        public static class StartInterpolatePath {
+            public static bool Prefix(){
+                ModdedCinemaCamera.StartInterpolate();
+                return false;
+            }
+        }
+        
+        [HarmonyPatch(typeof(CameraInterpolate), "UpdateSlerp")]
+        public static class UpdateSlerpPatch {
+            public static bool Prefix(
+                ref Vector3 ___m_StartPos,
+                ref Vector3 ___m_StartPivot,
+                ref float ___m_StartOrthographicSize,
+                ref Vector3 ___m_EndPos,
+                ref Vector3 ___m_EndPivot,
+                ref float ___m_EndOrthographicSize,
+                ref Quaternion ___m_EndRot,
+
+                ref float ___m_ElapsedSeconds, 
+                ref float ___m_TransitionSeconds, 
+                ref bool ___m_Slerping
+            ){
+                if (CinemaCamera.Activated()){
+                    if (ModdedCinemaCamera.keyFrames.Count == 0){
+                        CameraInterpolate.Cancel();
+                        return false;
+                    }
+                    else if (ModdedCinemaCamera.keyFrames.Count < 2){
+                        PopUpWarning.Display("You must add at least 2 keyframes to use the cinematic camera!");
+                        CameraInterpolate.Cancel();
+                        return false;
+                    }
+                    ___m_ElapsedSeconds += Time.unscaledDeltaTime;
+		            float num = Mathf.Clamp01(___m_ElapsedSeconds / ___m_TransitionSeconds);
+		            Vector3 vector = Vector3.Lerp(___m_StartPivot, ___m_EndPivot, num);
+		            PointsOfView.m_Pivot = vector;
+		            Vector3 normalized = (___m_StartPos - vector).normalized;
+		            Vector3 normalized2 = (___m_EndPos - vector).normalized;
+		            Vector3 normalized3 = Vector3.Slerp(normalized, normalized2, num).normalized;
+
+                    Cameras.MainCamera().transform.position = vector + normalized3 * GameSettings.CamDistFromPivot();
+		            Cameras.MainCamera().transform.LookAt(vector);
+		            Cameras.SetOrthographicSize(Mathf.SmoothStep(___m_StartOrthographicSize, ___m_EndOrthographicSize, num));
+		            Bridge.RefreshZoomDependentVisibility();
+		            if (Mathf.Approximately(num, 1f))
+		            {
+                        ModdedCinemaCamera.current_start += 1;
+                        ModdedCinemaCamera.current_end += 1;
+                        if (ModdedCinemaCamera.current_end >= ModdedCinemaCamera.keyFrames.Count){
+                            CameraInterpolate.Cancel();
+                        }
+                        else {
+                            ModdedCinemaCamera.StartInterpolate();
+                        }
+		            }
+		            CameraControl.RegisterTransformUpdate();
+
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        
+
+        [HarmonyPatch(typeof(CameraInterpolate), "Cancel")]
+        public static class CameraInterpolateCancel {
+            public static void Postfix(){
+                ModdedCinemaCamera.current_start = 0;
+                ModdedCinemaCamera.current_end = 1;
+            }
+        }
+
+        
+        
+        
+        private static void cin_add(){
+            CinemaCamera.SaveStart(null); // we do this...
+            CinemaCamera.SaveEnd(); //   to trick the main Cinema Camera into thinking it's initiated
+            // usage: cin_add <float m_DurationSeconds> <bool m_Ease> <int index>
+            float m_DurationSeconds = 5;
+            bool m_Ease = false;
+            int index = -1;
+            if (uConsole.NextParameterIsFloat()) m_DurationSeconds = uConsole.GetFloat();
+            if (uConsole.NextParameterIsBool()) m_Ease = uConsole.GetBool();
+            if (uConsole.GetNumParameters() == 3 && uConsole.NextParameterIsInt()){
+                index = Math.Max(0, uConsole.GetInt());
+            }
+
+            CameraKeyFrame cam = ModdedCinemaCamera.currentCamera();
+            cam.m_DurationSeconds = m_DurationSeconds;
+            cam.m_Ease = m_Ease;
+            if (index != -1){
+                ModdedCinemaCamera.keyFrames.Insert(index, cam);
+                ModdedCinemaCamera.InterpolateHandler.controlPointsList.Insert(index, cam.m_StartPos);
+                uConsole.Log($"Inserted keyframe into position {index} of list.");
+            }
+            else {
+                ModdedCinemaCamera.keyFrames.Add(cam);
+                ModdedCinemaCamera.InterpolateHandler.controlPointsList.Add(cam.m_StartPos);
+                uConsole.Log("Added keyframe to end of list.");
+            }
+            
+        }
+        private static void cin_delete(){
+            if (uConsole.GetNumParameters() == 0){
+                ModdedCinemaCamera.keyFrames.Clear();
+                ModdedCinemaCamera.InterpolateHandler.controlPointsList.Clear();
+                uConsole.Log("Cleared keyframes.");
+            }
+            else {
+                int index = uConsole.GetInt();
+                ModdedCinemaCamera.keyFrames.RemoveAt(index);
+                ModdedCinemaCamera.InterpolateHandler.controlPointsList.RemoveAt(index);
+                uConsole.Log($"Deleted keyframe at position {index}");
+            }
+        }
+
+        private static void cin_modify(){
+            CinemaCamera.SaveStart(null); // we do this...
+            CinemaCamera.SaveEnd(); //   to trick the main Cinema Camera into thinking it's initiated
+            // usage: cin_add <float m_DurationSeconds> <bool m_Ease> <int index>
+            int index = ModdedCinemaCamera.keyFrames.Count - 1;
+            if (uConsole.NextParameterIsInt()) index = Mathf.Clamp(uConsole.GetInt(), 0, ModdedCinemaCamera.keyFrames.Count - 1);
+            CameraKeyFrame cam = ModdedCinemaCamera.keyFrames[index];
+            
+            if (uConsole.NextParameterIsFloat()) cam.m_DurationSeconds = uConsole.GetFloat();
+            if (uConsole.NextParameterIsBool()) cam.m_Ease = uConsole.GetBool();
+            uConsole.Log($"Modified keyframe {index}");
+            
+        }
+
+        private static void cin_restore(){
+            int index = uConsole.GetInt();
+            ModdedCinemaCamera.restore(index);
+        }
+        private static void cin_log(){
+            for (var i = 0; i < ModdedCinemaCamera.keyFrames.Count; i++){
+                CameraKeyFrame cam = ModdedCinemaCamera.keyFrames[i];
+                uConsole.Log($"{i} - Duration to get to from previous: {cam.m_DurationSeconds}");
+            }
+            
+        }
+        
+
         private static void cin_start()
         {
             Vehicle vehicle = null;
