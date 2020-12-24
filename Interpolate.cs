@@ -10,7 +10,7 @@ public class CatmullRomSpline
 	public bool LoopBack = false;
 
 	//Display a spline between 2 points derived with the Catmull-Rom spline algorithm
-	Vector3 Interpolate(int pos, float t)
+	public Vector3 Interpolate(int pos, float t)
 	{
 		//The 4 points we need to form a spline between p1 and p2
 		Vector3 p0 = controlPointsList[ClampListPos(pos - 1)];

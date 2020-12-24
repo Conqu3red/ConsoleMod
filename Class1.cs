@@ -308,6 +308,8 @@ namespace ConsoleMod
             public static int current_end = 1;
 
             public static CatmullRomSpline InterpolateHandler = new CatmullRomSpline();
+
+            public static CatmullRomSpline PivotHandler = new CatmullRomSpline();
             public static CameraKeyFrame currentCamera(){
                 CameraKeyFrame cam = new CameraKeyFrame();
                 cam.m_StartPos = Cameras.MainCamera().transform.position;
@@ -372,12 +374,13 @@ namespace ConsoleMod
                     }
                     ___m_ElapsedSeconds += Time.unscaledDeltaTime;
 		            float num = Mathf.Clamp01(___m_ElapsedSeconds / ___m_TransitionSeconds);
-		            Vector3 vector = Vector3.Lerp(___m_StartPivot, ___m_EndPivot, num);
-		            PointsOfView.m_Pivot = vector;
-		            Vector3 normalized = (___m_StartPos - vector).normalized;
-		            Vector3 normalized2 = (___m_EndPos - vector).normalized;
-		            Vector3 normalized3 = Vector3.Slerp(normalized, normalized2, num).normalized;
+                    
 
+                    Vector3 vector = ModdedCinemaCamera.PivotHandler.Interpolate(ModdedCinemaCamera.current_start, num);
+                    Vector3 normalized3 = ModdedCinemaCamera.InterpolateHandler.Interpolate(ModdedCinemaCamera.current_start, num).normalized;
+                    // testing smooth movement
+                    PointsOfView.m_Pivot = vector;
+                    
                     Cameras.MainCamera().transform.position = vector + normalized3 * GameSettings.CamDistFromPivot();
 		            Cameras.MainCamera().transform.LookAt(vector);
 		            Cameras.SetOrthographicSize(Mathf.SmoothStep(___m_StartOrthographicSize, ___m_EndOrthographicSize, num));
@@ -390,7 +393,15 @@ namespace ConsoleMod
                             CameraInterpolate.Cancel();
                         }
                         else {
-                            ModdedCinemaCamera.StartInterpolate();
+                            CameraKeyFrame target = ModdedCinemaCamera.keyFrames[ModdedCinemaCamera.current_end];
+			                CameraInterpolate.SlerpTo(
+                                target.m_StartPivot, 
+                                target.m_StartPos, 
+                                target.m_StartRot, 
+                                target.m_StartOrthographicSize, 
+                                target.m_DurationSeconds, 
+                                target.m_Ease
+                            );
                         }
 		            }
 		            CameraControl.RegisterTransformUpdate();
@@ -432,12 +443,14 @@ namespace ConsoleMod
             cam.m_Ease = m_Ease;
             if (index != -1){
                 ModdedCinemaCamera.keyFrames.Insert(index, cam);
-                ModdedCinemaCamera.InterpolateHandler.controlPointsList.Insert(index, cam.m_StartPos);
+                ModdedCinemaCamera.InterpolateHandler.controlPointsList.Insert(index, cam.m_StartPos.normalized);
+                ModdedCinemaCamera.PivotHandler.controlPointsList.Insert(index, cam.m_StartPivot);
                 uConsole.Log($"Inserted keyframe into position {index} of list.");
             }
             else {
                 ModdedCinemaCamera.keyFrames.Add(cam);
-                ModdedCinemaCamera.InterpolateHandler.controlPointsList.Add(cam.m_StartPos);
+                ModdedCinemaCamera.InterpolateHandler.controlPointsList.Add(cam.m_StartPos.normalized);
+                ModdedCinemaCamera.PivotHandler.controlPointsList.Add(cam.m_StartPivot);
                 uConsole.Log("Added keyframe to end of list.");
             }
             
@@ -446,12 +459,14 @@ namespace ConsoleMod
             if (uConsole.GetNumParameters() == 0){
                 ModdedCinemaCamera.keyFrames.Clear();
                 ModdedCinemaCamera.InterpolateHandler.controlPointsList.Clear();
+                ModdedCinemaCamera.PivotHandler.controlPointsList.Clear();
                 uConsole.Log("Cleared keyframes.");
             }
             else {
-                int index = uConsole.GetInt();
+                int index = Mathf.Clamp(uConsole.GetInt(), 0, ModdedCinemaCamera.keyFrames.Count - 1);
                 ModdedCinemaCamera.keyFrames.RemoveAt(index);
                 ModdedCinemaCamera.InterpolateHandler.controlPointsList.RemoveAt(index);
+                ModdedCinemaCamera.PivotHandler.controlPointsList.RemoveAt(index);
                 uConsole.Log($"Deleted keyframe at position {index}");
             }
         }
