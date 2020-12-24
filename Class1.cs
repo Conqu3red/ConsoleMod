@@ -21,7 +21,7 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.1.0.0";
+            PluginVersion = "0.2.0.1";
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enabled");
         public static ConfigEntry<bool>
