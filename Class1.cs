@@ -220,6 +220,7 @@ namespace ConsoleMod
 
             }
         }
+        
         private static void popup_test() 
         {
             GameUI.ShowMessage(ScreenMessageLocation.TOP_LEFT, "hey", 5f);
