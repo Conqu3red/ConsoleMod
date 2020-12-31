@@ -30,7 +30,7 @@ namespace ConsoleMod
         public static ConsoleMod instance;
         void Awake()
         {
-            if (instance == null) instance = this;
+			if (instance == null) instance = this;
             // Use this if you wish to make the mod trigger cheat mode ingame.
             // Set this true if your mod effects physics or allows mods that you can't normally do.
             isCheat = false;
@@ -224,6 +224,7 @@ namespace ConsoleMod
         {
             GameUI.ShowMessage(ScreenMessageLocation.TOP_LEFT, "hey", 5f);
             PopUpMessage.DisplayOkOnly("ok only", null);
+            PopUpMessage.Display("ok and cancel", null);
             PopUpMessage.Display("ok and cancel", null, () => {});
             PopUpWarning.Display("PopUpWarning");
             PopUpTwoChoices.Display(
