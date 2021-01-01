@@ -21,7 +21,7 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.2.0.1";
+            PluginVersion = "0.2.0";
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enabled");
         public static ConfigEntry<bool>
@@ -131,12 +131,12 @@ namespace ConsoleMod
         // Use this method to execute code that will be ran when the mod is enabled.
         public override void enableMod() 
         {
-            //Logger.LogInfo("Enabled!");
+            modEnabled.Value = true;
         }
         // Use this method to execute code that will be ran when the mod is disabled.
         public override void disableMod() 
         {
-            //Logger.LogInfo("Disabled!");
+            modEnabled.Value = false;
         }
 
         // I have no idea how either of this functions work,
