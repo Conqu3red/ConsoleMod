@@ -85,7 +85,7 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("version", "show uConsole version", new uConsole.DebugCommand(mod_ver));
 
                 uConsole.RegisterCommand("popup_test", new uConsole.DebugCommand(popup_test));
-                uConsole.RegisterCommand("set_cheat", new uConsole.DebugCommand(toggleCheat));
+                //uConsole.RegisterCommand("set_cheat", new uConsole.DebugCommand(toggleCheat));
                 
                 // modded Cinematic Camera
                 uConsole.RegisterCommand("cin_add", new uConsole.DebugCommand(cin_add));
@@ -104,13 +104,13 @@ namespace ConsoleMod
 
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
                 uConsole.RegisterCommand("bridge_reveal", new uConsole.DebugCommand(bridge_reveal));
-                uConsole.RegisterCommand("cam_info", new uConsole.DebugCommand(cam_info));
-                uConsole.RegisterCommand("cin_start", new uConsole.DebugCommand(cin_start));
-                uConsole.RegisterCommand("cin_start_restore", new uConsole.DebugCommand(cin_start_restore));
-                uConsole.RegisterCommand("cin_ease", new uConsole.DebugCommand(cin_ease));
-                uConsole.RegisterCommand("cin_end", new uConsole.DebugCommand(cin_end));
-                uConsole.RegisterCommand("cin_end_restore", new uConsole.DebugCommand(cin_end_restore));
-                uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
+                //uConsole.RegisterCommand("cam_info", new uConsole.DebugCommand(cam_info));
+                //uConsole.RegisterCommand("cin_start", new uConsole.DebugCommand(cin_start));
+                //uConsole.RegisterCommand("cin_start_restore", new uConsole.DebugCommand(cin_start_restore));
+                //uConsole.RegisterCommand("cin_ease", new uConsole.DebugCommand(cin_ease));
+                //uConsole.RegisterCommand("cin_end", new uConsole.DebugCommand(cin_end));
+                //uConsole.RegisterCommand("cin_end_restore", new uConsole.DebugCommand(cin_end_restore));
+                //uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
                 uConsole.RegisterCommand("vehicle_show_polygon_shapes", new uConsole.DebugCommand(vehicle_show_polygon_shapes));
                 
             }
@@ -309,6 +309,8 @@ namespace ConsoleMod
             public static int current_start = 0;
             public static int current_end = 1;
 
+            public static float duration = 0;
+
             public static CatmullRomSpline InterpolateHandler = new CatmullRomSpline();
 
             public static CatmullRomSpline PivotHandler = new CatmullRomSpline();
@@ -322,6 +324,8 @@ namespace ConsoleMod
             }
 
             public static void StartInterpolate(){
+                duration = 5f;
+                computeFromOneDuration();
                 restore(current_start);
                 CameraKeyFrame target = keyFrames[current_end];
 			    CameraInterpolate.SlerpTo(
@@ -340,7 +344,34 @@ namespace ConsoleMod
 		        PointsOfView.UpdatePivotBasedOnCamera();
 		        Cameras.SetOrthographicSize(cam.m_StartOrthographicSize);
             }
+            public static float distTo(int pos){
+                float dist = 0;
+                Vector3 current;
+                Vector3 prev = new Vector3();
+                for (var i = 0; i < 50; i++){
+                    if (i == 0) continue;
+                    current = InterpolateHandler.Interpolate(pos, i/50);
+                    dist += Vector3.Distance(current, prev);
+                    prev = current;
+                }
+                return dist;
+            }
+
+            public static void computeFromOneDuration(){
+                float total_dist = 0;
+                float small_dist = 0;
+                for (var i = 0; i < keyFrames.Count-1; i++){
+                    total_dist += distTo(i+1);
+                }
+                for (var i = 0; i < keyFrames.Count-1; i++){
+                    CameraKeyFrame endFrame = keyFrames[i+1];
+                    small_dist = distTo(i+1);
+                    Debug.Log($"{i+1} {small_dist} {total_dist} {(small_dist/total_dist)*duration}");
+                    keyFrames[i+1].m_DurationSeconds = (small_dist/total_dist)*duration;
+                }
+            }
         }
+
         [HarmonyPatch(typeof(CinemaCamera), "StartInterpolate")]
         public static class StartInterpolatePath {
             public static bool Prefix(){
