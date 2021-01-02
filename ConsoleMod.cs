@@ -93,8 +93,9 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("cin_modify", new uConsole.DebugCommand(cin_modify));
                 uConsole.RegisterCommand("cin_restore", new uConsole.DebugCommand(cin_restore));
                 uConsole.RegisterCommand("cin_list", new uConsole.DebugCommand(cin_log));
-                
-                
+                uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
+                uConsole.RegisterCommand("cin_mode", new uConsole.DebugCommand(cin_mode));
+
                 // z modifiers 
                 
                 uConsole.RegisterCommand("set_z", new uConsole.DebugCommand(set_z));
@@ -304,12 +305,18 @@ namespace ConsoleMod
             public bool m_Ease = false;
 
         }
+        public enum CinemaCameraModes {
+            ONE_DURATION,
+            MULTI_DURATION
+        }
+
         public static class ModdedCinemaCamera {
             public static List<CameraKeyFrame> keyFrames = new List<CameraKeyFrame> ();
             public static int current_start = 0;
             public static int current_end = 1;
 
-            public static float duration = 0;
+            public static CinemaCameraModes mode = CinemaCameraModes.ONE_DURATION;
+            public static float duration = 5;
 
             public static CatmullRomSpline InterpolateHandler = new CatmullRomSpline();
 
@@ -324,8 +331,9 @@ namespace ConsoleMod
             }
 
             public static void StartInterpolate(){
-                duration = 5f;
-                computeFromOneDuration();
+                if (mode == CinemaCameraModes.ONE_DURATION){
+                    computeFromOneDuration();
+                }
                 restore(current_start);
                 CameraKeyFrame target = keyFrames[current_end];
 			    CameraInterpolate.SlerpTo(
@@ -349,10 +357,14 @@ namespace ConsoleMod
                 Vector3 current;
                 Vector3 prev = new Vector3();
                 for (var i = 0; i < 50; i++){
-                    if (i == 0) continue;
-                    current = InterpolateHandler.Interpolate(pos, i/50);
-                    dist += Vector3.Distance(current, prev);
-                    prev = current;
+                    if (i != 0){
+                        current = InterpolateHandler.Interpolate(pos, i/50);
+                        dist += Vector3.Distance(current, prev);
+                        prev = current;
+                    }
+                    else {
+                        prev = keyFrames[pos-1].m_StartPos;
+                    }
                 }
                 return dist;
             }
@@ -360,14 +372,14 @@ namespace ConsoleMod
             public static void computeFromOneDuration(){
                 float total_dist = 0;
                 float small_dist = 0;
-                for (var i = 0; i < keyFrames.Count-1; i++){
-                    total_dist += distTo(i+1);
+                for (var i = 1; i < keyFrames.Count; i++){
+                    total_dist += distTo(i);
                 }
-                for (var i = 0; i < keyFrames.Count-1; i++){
-                    CameraKeyFrame endFrame = keyFrames[i+1];
-                    small_dist = distTo(i+1);
-                    Debug.Log($"{i+1} {small_dist} {total_dist} {(small_dist/total_dist)*duration}");
-                    keyFrames[i+1].m_DurationSeconds = (small_dist/total_dist)*duration;
+                for (var i = 1; i < keyFrames.Count; i++){
+                    CameraKeyFrame endFrame = keyFrames[i];
+                    small_dist = distTo(i);
+                    //Debug.Log($"{i} {small_dist} {total_dist} {(small_dist/total_dist)*duration}");
+                    keyFrames[i].m_DurationSeconds = (small_dist/total_dist)*duration;
                 }
             }
         }
@@ -529,7 +541,35 @@ namespace ConsoleMod
             }
             
         }
-        
+
+        private static void cin_mode(){
+            switch (ModdedCinemaCamera.mode){
+                case (CinemaCameraModes.MULTI_DURATION):
+                    ModdedCinemaCamera.mode = CinemaCameraModes.ONE_DURATION;
+                    uConsole.Log("Set mode to ONE_DURATION (smoother)");
+                    return;
+                case (CinemaCameraModes.ONE_DURATION):
+                    ModdedCinemaCamera.mode = CinemaCameraModes.MULTI_DURATION;
+                    uConsole.Log("Set mode to MULTI_DURATION (control time taken to reach each point)");
+                    return;
+            }
+        }
+        private static void cin_duration()
+        {
+            if (ModdedCinemaCamera.mode == CinemaCameraModes.MULTI_DURATION){
+                uConsole.Log("Cannot set single duration when camera mode is MULTI_DURATION");
+            }
+            if (uConsole.GetNumParameters() == 0)
+            {
+                uConsole.Log("Duration is: " + ModdedCinemaCamera.duration.ToString() + "s");
+                return;
+            }
+            if (uConsole.GetNumParameters() != 1)
+            {
+                uConsole.Log("Usage is cin_duration <seconds>");
+            }
+            ModdedCinemaCamera.duration = uConsole.GetFloat();
+        }
 
         private static void cin_start()
         {
@@ -585,19 +625,19 @@ namespace ConsoleMod
         }
 
         // Token: 0x060058E4 RID: 22756
-        private static void cin_duration()
-        {
-            if (uConsole.GetNumParameters() == 0)
-            {
-                uConsole.Log("Duration is: " + CinemaCamera.m_DurationSeconds.ToString() + "s");
-                return;
-            }
-            if (uConsole.GetNumParameters() != 1)
-            {
-                uConsole.Log("Usage is cin_duration <seconds>");
-            }
-            CinemaCamera.m_DurationSeconds = uConsole.GetFloat();
-        }
+        //private static void cin_duration()
+        //{
+        //    if (uConsole.GetNumParameters() == 0)
+        //    {
+        //        uConsole.Log("Duration is: " + CinemaCamera.m_DurationSeconds.ToString() + "s");
+        //        return;
+        //    }
+        //    if (uConsole.GetNumParameters() != 1)
+        //    {
+        //        uConsole.Log("Usage is cin_duration <seconds>");
+        //    }
+        //    CinemaCamera.m_DurationSeconds = uConsole.GetFloat();
+        //}
 
         // Token: 0x060058E5 RID: 22757
         private static void vehicle_show_polygon_shapes()
