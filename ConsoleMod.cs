@@ -8,6 +8,11 @@ using System.Reflection;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using PolyPhysics.Viewers;
+using Poly.Physics;
+using Poly.Math;
+using PolyPhysics;
+using Common.Class;
+using Common.Extension;
 
 namespace ConsoleMod
 {
@@ -23,9 +28,14 @@ namespace ConsoleMod
             PluginName = "Console Mod",
             PluginVersion = "0.2.0";
         public static ConfigDefinition
-            modEnabledDef = new ConfigDefinition("Console", "Enabled");
+            modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
+            recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
+            frameByFrameDef = new ConfigDefinition("Smooth Playback", "Frame By Frame Mode");
+
         public static ConfigEntry<bool>
-            modEnabled;
+            modEnabled,
+            recenterEnabled,
+            frameByFrame;
 
         public static ConsoleMod instance;
         void Awake()
@@ -42,6 +52,10 @@ namespace ConsoleMod
 
             modEnabled = Config.Bind(modEnabledDef, true, new ConfigDescription("Enable Mod"));
             modEnabled.SettingChanged += onEnableDisable;
+
+            recenterEnabled = Config.Bind(recenterEnabledDef, true, new ConfigDescription("Enable or disable the recnter button"));
+            frameByFrame = Config.Bind(frameByFrameDef, false, new ConfigDescription("Frame By Frame Mode"));
+
 
             harmony = new Harmony("org.bepinex.plugins.ConsoleCinematicCamera");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -294,6 +308,124 @@ namespace ConsoleMod
             (
             Camera.main.orthographicSize.ToString()
             ));
+        }
+
+
+
+        [HarmonyPatch(typeof(BridgeJoints), "ApplySimulationResults")]
+        public static class JointRenderPath {
+            public static bool Prefix(){
+                if (frameByFrame.Value && modEnabled.Value){
+                    foreach (BridgeJoint bridgeJoint in BridgeJoints.m_Joints)
+		            {
+		            	if (bridgeJoint.gameObject.activeInHierarchy && bridgeJoint.m_PhysicsNode && bridgeJoint.m_PhysicsNode.handle && bridgeJoint.m_PhysicsNode.handle.world)
+		            	{
+		            		bridgeJoint.transform.position = bridgeJoint.m_PhysicsNode.pos;
+		            	}
+		            }
+                    return false;
+                }
+                return true;
+            }
+        }
+        [HarmonyPatch(typeof(Vehicle), "SyncVisual")]
+        public static class VehicleRenderPath {
+            public static bool Prefix(
+                ref Vehicle __instance, 
+                ref PolyPhysics.Vehicle ___m_Physics, 
+                ref VehicleSyncTarget[] ___m_SyncTargets
+            ){
+                if (frameByFrame.Value && modEnabled.Value){
+                    if (___m_Physics && ___m_SyncTargets != null && Bridge.IsSimulating())
+		            {
+		            	foreach (VehicleSyncTarget vehicleSyncTarget in ___m_SyncTargets)
+		            	{
+		            		if (vehicleSyncTarget && (vehicleSyncTarget.m_type == VehicleSyncTarget.Type.VisualMesh || vehicleSyncTarget.m_type == VehicleSyncTarget.Type.Invalid))
+		            		{
+		            			vehicleSyncTarget.Sync(false);
+		            		}
+		            	}
+		            }
+                    return false;
+                }
+                return true;
+            }
+        }
+        [HarmonyPatch(typeof(BridgeEdge), "UpdateManual")]
+        public static class BridgeEdgeRenderPatch {
+            public static bool Prefix(ref BridgeEdge __instance, ref bool ___m_ForceDisabled){
+                if (frameByFrame.Value && modEnabled.Value){
+                    Vector3 position = __instance.m_JointA.transform.position;
+		            Vector3 position2 = __instance.m_JointB.transform.position;
+		            Vector3 toDirection = position2 - position;
+		            float magnitude = toDirection.magnitude;
+		            if (__instance.m_PhysicsEdge && __instance.m_PhysicsEdge.handle && __instance.m_PhysicsEdge.node0 && __instance.m_PhysicsEdge.node0.handle && __instance.m_PhysicsEdge.node0.handle.world && __instance.m_PhysicsEdge.node1 && __instance.m_PhysicsEdge.node1.handle && __instance.m_PhysicsEdge.node1.handle.world)
+		            {
+		            	WorldObjectImpl handle = __instance.m_PhysicsEdge.handle;
+		            	//float currentFractionOfFixedFrame = SingletonMonoBehaviour<World>.instance.currentFractionOfFixedFrame;
+		            	Vec2 smoothPos = __instance.m_PhysicsEdge.node0.pos; //  Modifed from SmoothPos to pos
+		            	Vec2 smoothPos2 = __instance.m_PhysicsEdge.node1.pos; // Modifed from SmoothPos to pos
+		            	__instance.transform.position = 0.5f * (smoothPos + smoothPos2);
+		            	if (__instance.m_PhysicsEdge.areNodesReversedInPhysics)
+		            	{
+		            		Values.Swap<Vec2>(ref smoothPos, ref smoothPos2);
+		            	}
+		            	Vec2 vec = smoothPos2 - smoothPos;
+		            	float z = Mathf.Atan2(vec.y, vec.x) * 57.29578f;
+		            	__instance.transform.rotation = Quaternion.Euler(0f, 0f, z);
+		            	float magnitude2 = vec.magnitude;
+		            	__instance.m_MeshRenderer.transform.SetLocalScaleX(magnitude2);
+		            	__instance.m_HighlightFX.transform.SetLocalScaleX(magnitude2);
+		            	if (!handle.isEnabled && !___m_ForceDisabled)
+		            	{
+		            		if ((__instance.m_Material.m_MaterialType == BridgeMaterialType.ROPE || __instance.m_Material.m_MaterialType == BridgeMaterialType.CABLE) && BridgeRopes.m_BridgeRopes.Count > 0)
+		            		{
+		            			BridgeRopes.DisableRopeForEdge(__instance);
+		            		}
+		            		__instance.ForceDisable();
+		            	}
+		            }
+		            else if (!float.IsInfinity(magnitude))
+		            {
+		            	__instance.transform.position = 0.5f * (position + position2);
+		            	__instance.transform.rotation = Quaternion.FromToRotation(Vector3.right, toDirection);
+		            	__instance.m_MeshRenderer.transform.SetLocalScaleX(magnitude);
+		            	__instance.m_HighlightFX.transform.SetLocalScaleX(magnitude);
+		            }
+		            if (__instance.m_SpringCoilVisualization != null)
+		            {
+		            	__instance.m_SpringCoilVisualization.UpdateLinks();
+		            }
+		            if (__instance.m_HydraulicEdgeVisualization != null)
+		            {
+		            	__instance.m_HydraulicEdgeVisualization.UpdateTransform_Manual(__instance);
+		            }
+                    return false;
+                }
+                return true;
+            }
+        }
+
+
+
+
+
+
+
+
+        [HarmonyPatch(typeof(GameStateManager), "UpdateManual")]
+        public static class RecenterPatch {
+            public static void Postfix(){
+                if ((
+                    GameStateManager.GetState() == GameState.SANDBOX || 
+                    GameStateManager.GetState() == GameState.BUILD || 
+                    GameStateManager.GetState() == GameState.SIM
+                    ) && ConsoleMod.modEnabled.Value && !ConsoleMod.recenterEnabled.Value
+                    )
+		        {
+			        GameUI.m_Instance.m_Recenter.gameObject.SetActive(false);
+		        }
+            }
         }
 
         public class CameraKeyFrame {
