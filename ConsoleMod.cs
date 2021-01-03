@@ -26,7 +26,7 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.2.0";
+            PluginVersion = "0.3.0";
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
             recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
