@@ -418,6 +418,7 @@ namespace ConsoleMod
         public static class StartSimPatch {
             public static void Postfix(GameState prevState){
                 if (modEnabled.Value && PauseOnSimStart.Value){
+                    SingletonMonoBehaviour<World>.instance.fastForwardToFrame = SingletonMonoBehaviour<World>.instance.frameCount + 1;
                     PauseNextFrame = true;
                 }
             }
@@ -429,17 +430,22 @@ namespace ConsoleMod
             public static void Postfix(){
                 if (modEnabled.Value){
                     if (stepFrame.Value.IsUp()){
-                        GameUI.m_Instance.m_TopBar.OnPauseSim();
-                        SingletonMonoBehaviour<World>.instance.FixedUpdate_Manual();
+                        //GameUI.m_Instance.m_TopBar.OnPauseSim();
+                        //Time.timeScale = 0f;
+                        GameUI.m_Instance.m_TopBar.OnUnPauseSim();
+                        SingletonMonoBehaviour<World>.instance.fastForwardToFrame = SingletonMonoBehaviour<World>.instance.frameCount + 1;
+                        //GameUI.m_Instance.m_TopBar.OnPauseSim();
+                        //GameUI.m_Instance.m_TopBar.OnUnPauseSim();
+                        PauseNextFrame = true;
                     }
                 }
             }
         }
-        [HarmonyPatch(typeof(GameStateSim), "FixedUpdateManual")]
-        public static class PauseOnStartPatch {
-            public static void Postfix(){
+        [HarmonyPatch(typeof(PolyPhysics.World), "FixedUpdate_Manual")]
+        public static class PausePatch {
+            public static void Postfix(ref PolyPhysics.World __instance){
                 if (modEnabled.Value && Bridge.IsSimulating()){
-                    if (PauseNextFrame){
+                    if (PauseNextFrame && __instance.frameCount -1 == __instance.fastForwardToFrame){
                         GameUI.m_Instance.m_TopBar.OnPauseSim();
                         PauseNextFrame = false;
                     }
