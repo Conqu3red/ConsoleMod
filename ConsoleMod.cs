@@ -30,14 +30,21 @@ namespace ConsoleMod
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
             recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
-            frameByFrameDef = new ConfigDefinition("Smooth Playback", "Frame By Frame Mode");
+            frameByFrameDef = new ConfigDefinition("Smooth Playback", "Frame By Frame Mode"),
+            stepFrameDef = new ConfigDefinition("Smooth Playback", "Step Frame"),
+            PauseOnSimStartDef = new ConfigDefinition("Smooth Playback", "Pause On Sim Start");
 
         public static ConfigEntry<bool>
             modEnabled,
             recenterEnabled,
-            frameByFrame;
+            frameByFrame,
+            PauseOnSimStart;
+        public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut>
+            stepFrame;
 
         public static ConsoleMod instance;
+
+        public static bool PauseNextFrame = false;
         void Awake()
         {
 			if (instance == null) instance = this;
@@ -55,7 +62,8 @@ namespace ConsoleMod
 
             recenterEnabled = Config.Bind(recenterEnabledDef, true, new ConfigDescription("Enable or disable the recnter button"));
             frameByFrame = Config.Bind(frameByFrameDef, false, new ConfigDescription("Frame By Frame Mode"));
-
+            stepFrame = Config.Bind(stepFrameDef, new BepInEx.Configuration.KeyboardShortcut(KeyCode.L), new ConfigDescription("Step Frame"));
+            PauseOnSimStart = Config.Bind(PauseOnSimStartDef, false, new ConfigDescription("Pause Simulation Straight away upon simulation start"));
 
             harmony = new Harmony("org.bepinex.plugins.ConsoleCinematicCamera");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -406,6 +414,38 @@ namespace ConsoleMod
             }
         }
 
+        [HarmonyPatch(typeof(GameStateSim), "Enter")]
+        public static class StartSimPatch {
+            public static void Postfix(GameState prevState){
+                if (modEnabled.Value && PauseOnSimStart.Value){
+                    PauseNextFrame = true;
+                }
+            }
+        }
+
+
+        [HarmonyPatch(typeof(GameStateSim), "UpdateManual")]
+        public static class StepFramePatch {
+            public static void Postfix(){
+                if (modEnabled.Value){
+                    if (stepFrame.Value.IsUp()){
+                        GameUI.m_Instance.m_TopBar.OnPauseSim();
+                        SingletonMonoBehaviour<World>.instance.FixedUpdate_Manual();
+                    }
+                }
+            }
+        }
+        [HarmonyPatch(typeof(GameStateSim), "FixedUpdateManual")]
+        public static class PauseOnStartPatch {
+            public static void Postfix(){
+                if (modEnabled.Value && Bridge.IsSimulating()){
+                    if (PauseNextFrame){
+                        GameUI.m_Instance.m_TopBar.OnPauseSim();
+                        PauseNextFrame = false;
+                    }
+                }
+            }
+        }
 
 
 
