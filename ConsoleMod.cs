@@ -95,11 +95,23 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("cin_list", new uConsole.DebugCommand(cin_log));
                 
                 
-                // z modifiers 
-                
+                // z modifiers     
                 uConsole.RegisterCommand("set_z", new uConsole.DebugCommand(set_z));
+		uConsole.RegisterCommand("add_z", new uConsole.DebugCommand(add_z));
                 uConsole.RegisterCommand("set_z_scale", new uConsole.DebugCommand(set_z_scale));
                 uConsole.RegisterCommand("shuffle_z", new uConsole.DebugCommand(shuffle_z));
+		// y modifiers
+		uConsole.RegisterCommand("set_y", new uConsole.DebugCommand(set_y));
+                uConsole.RegisterCommand("add_y", new uConsole.DebugCommand(add_y));
+                uConsole.RegisterCommand("set_y_scale", new uConsole.DebugCommand(set_y_scale));
+                uConsole.RegisterCommand("shuffle_y", new uConsole.DebugCommand(shuffle_y));
+		// x modifiers
+                uConsole.RegisterCommand("set_x", new uConsole.DebugCommand(set_x));
+                uConsole.RegisterCommand("add_x", new uConsole.DebugCommand(add_x));
+                uConsole.RegisterCommand("set_x_scale", new uConsole.DebugCommand(set_x_scale));
+                uConsole.RegisterCommand("shuffle_x", new uConsole.DebugCommand(shuffle_x));
+		// all-axis modifiers
+                uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
 
 
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
@@ -184,6 +196,20 @@ namespace ConsoleMod
 
             }
         }
+	private static void add_z(){
+            float z = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y, component.gameObject.transform.position.z + z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
         private static void shuffle_z(){
             float z_start = 5f;
             float z_end = 100f;
@@ -220,7 +246,149 @@ namespace ConsoleMod
 
             }
         }
-        
+        private static void set_y(){
+            float y = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, y, component.gameObject.transform.position.z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+        private static void add_y(){
+            float y = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y + y, component.gameObject.transform.position.z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+        private static void shuffle_y(){
+            float y_start = 5f;
+            float y_end = 100f;
+            float y;
+            if (uConsole.GetNumParameters() == 2){
+                y_start = uConsole.GetFloat();
+                y_end = uConsole.GetFloat();
+            }
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    y = UnityEngine.Random.Range(y_start, y_end);
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, y, component.gameObject.transform.position.z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+        private static void set_y_scale(){
+            float y = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_scale = component.gameObject.transform.localScale.ToString();
+                    Vector3 new_scale = new Vector3(component.gameObject.transform.localScale.x, y, component.gameObject.transform.localScale.z);
+                    component.gameObject.transform.localScale = new_scale;
+                    
+                    uConsole.Log(orig_scale + " -> " + component.gameObject.transform.localScale.ToString());
+                }
+
+            }
+        }
+        private static void set_x(){
+            float x = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(x, component.gameObject.transform.position.y, component.gameObject.transform.position.z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+	private static void add_x(){
+            float x = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x + x, component.gameObject.transform.position.y, component.gameObject.transform.position.z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+        private static void shuffle_x(){
+            float x_start = 5f;
+            float x_end = 100f;
+            float x;
+            if (uConsole.GetNumParameters() == 2){
+                x_start = uConsole.GetFloat();
+                x_end = uConsole.GetFloat();
+            }
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    x = UnityEngine.Random.Range(x_start, x_end);
+                    string orig_pos = component.gameObject.transform.position.ToString();
+                    Vector3 new_pos = new Vector3(x, component.gameObject.transform.position.y, component.gameObject.transform.position.z);
+                    component.gameObject.transform.position = new_pos;
+                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
+                }
+
+            }
+        }
+        private static void set_x_scale(){
+            float x = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_scale = component.gameObject.transform.localScale.ToString();
+                    Vector3 new_scale = new Vector3(x, component.gameObject.transform.localScale.y, component.gameObject.transform.localScale.z);
+                    component.gameObject.transform.localScale = new_scale;
+                    
+                    uConsole.Log(orig_scale + " -> " + component.gameObject.transform.localScale.ToString());
+                }
+
+            }
+        }
+        private static void set_scale(){
+            float scale = uConsole.GetFloat();
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                var obj = SandboxSelectionSet.m_Items[i];
+                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                if (component != null){
+                    string orig_scale = component.gameObject.transform.localScale.ToString();
+                    Vector3 new_scale = new Vector3(scale, scale, scale);
+                    component.gameObject.transform.localScale = new_scale;
+                    
+                    uConsole.Log(orig_scale + " -> " + component.gameObject.transform.localScale.ToString());
+                }
+
+            }
+        }
         private static void popup_test() 
         {
             GameUI.ShowMessage(ScreenMessageLocation.TOP_LEFT, "hey", 5f);
