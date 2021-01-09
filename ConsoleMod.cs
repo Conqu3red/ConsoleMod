@@ -13,6 +13,7 @@ using Poly.Math;
 using PolyPhysics;
 using Common.Class;
 using Common.Extension;
+using TMPro;
 
 namespace ConsoleMod
 {
@@ -71,8 +72,13 @@ namespace ConsoleMod
             // ConsoleCommands.Init();
             
             PolyTechMain.registerMod(this);
-
-            
+        }
+        [HarmonyPatch(typeof(GameManager), "StartManual")]
+        public static class StartPatch {
+            public static void GameStartPostfix(){
+                //SandboxInputField test =  GameUI.m_Instance.m_SandboxEditCustomShape.gameObject.AddComponent<SandboxInputField>() as SandboxInputField;
+                //test.name = "injected"; // doesn't work
+            }
         }
 
         public void onEnableDisable(object sender, EventArgs e)
@@ -118,11 +124,11 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
                 uConsole.RegisterCommand("cin_mode", new uConsole.DebugCommand(cin_mode));
 
-                // z modifiers 
+                // custom shape modifiers
                 
-                uConsole.RegisterCommand("set_z", new uConsole.DebugCommand(set_z));
-                uConsole.RegisterCommand("set_z_scale", new uConsole.DebugCommand(set_z_scale));
-                uConsole.RegisterCommand("shuffle_z", new uConsole.DebugCommand(shuffle_z));
+                uConsole.RegisterCommand("set_pos", new uConsole.DebugCommand(set_pos));
+                uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
+                uConsole.RegisterCommand("shuffle_pos", new uConsole.DebugCommand(shuffle_pos));
 
 
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
@@ -193,51 +199,133 @@ namespace ConsoleMod
         }
 
 
-        private static void set_z(){
-            float z = uConsole.GetFloat();
+        private static void set_pos(){
+            // Usage:
+            // set_pos <axis> <value>
+            // set_pos <x> <y> <z>
+            
+            float x = -1e16f, y = -1e16f, z = -1e16f;
+            string axis;
+            if (
+                (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
+                (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
+            ){
+                uConsole.Log($"Usage:\nset_pos <axis> <value>\nset_pos <x> <y> <z>");
+                return;
+            }
+            if (!uConsole.NextParameterIsFloat()){
+                axis = uConsole.GetString().ToLower();
+                if (axis == "x"){
+                    x = uConsole.GetFloat();
+                }
+                if (axis == "y"){
+                    y = uConsole.GetFloat();
+                }
+                if (axis == "z"){
+                    z = uConsole.GetFloat();
+                }
+            }
+            else {
+                x = uConsole.GetFloat();
+                y = uConsole.GetFloat();
+                z = uConsole.GetFloat();
+            }
+
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 var obj = SandboxSelectionSet.m_Items[i];
                 CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                
                 if (component != null){
                     string orig_pos = component.gameObject.transform.position.ToString();
-                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y, z);
+                    if (x == -1e16f) x = component.gameObject.transform.position.x;
+                    if (y == -1e16f) y = component.gameObject.transform.position.y;
+                    if (z == -1e16f) z = component.gameObject.transform.position.z;
+                    Vector3 new_pos = new Vector3(x, y, z);
                     component.gameObject.transform.position = new_pos;
                     uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
                 }
 
             }
         }
-        private static void shuffle_z(){
-            float z_start = 5f;
-            float z_end = 100f;
-            float z;
-            if (uConsole.GetNumParameters() == 2){
-                z_start = uConsole.GetFloat();
-                z_end = uConsole.GetFloat();
+        private static void shuffle_pos(){
+            // Usage:
+            // shuffle_pos <axis> <start> <end>
+            
+            float x = -1e16f, y = -1e16f, z = -1e16f;
+            float start, end;
+            string axis;
+            if (uConsole.GetNumParameters() == 0 || uConsole.GetNumParameters() == 2){
+                uConsole.Log($"Usage:\nshuffle_pos <axis> <value>");
+                return;
             }
+            start = uConsole.GetFloat();
+            end = uConsole.GetFloat();
+            axis = uConsole.GetString().ToLower();
+            
+            if (axis == "x") x = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+            if (axis == "y") y = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+            if (axis == "z") z = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 var obj = SandboxSelectionSet.m_Items[i];
                 CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                
                 if (component != null){
-                    z = UnityEngine.Random.Range(z_start, z_end);
                     string orig_pos = component.gameObject.transform.position.ToString();
-                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y, z);
+                    if (x == -1e16f) x = component.gameObject.transform.position.x;
+                    if (y == -1e16f) y = component.gameObject.transform.position.y;
+                    if (z == -1e16f) z = component.gameObject.transform.position.z;
+                    Vector3 new_pos = new Vector3(x, y, z);
                     component.gameObject.transform.position = new_pos;
                     uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
                 }
 
             }
         }
-        private static void set_z_scale(){
-            float z = uConsole.GetFloat();
+
+        private static void set_scale(){
+            // Usage:
+            // set_scale <axis> <value>
+            // set_scale <x> <y> <z>
+            
+            float x = -1e16f, y = -1e16f, z = -1e16f;
+            string axis;
+            if (
+                (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
+                (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
+            ){
+                uConsole.Log($"Usage:\nset_scale <axis> <value>\nset_scale <x> <y> <z>");
+                return;
+            }
+            if (!uConsole.NextParameterIsFloat()){
+                axis = uConsole.GetString().ToLower();
+                if (axis == "x"){
+                    x = uConsole.GetFloat();
+                }
+                if (axis == "y"){
+                    y = uConsole.GetFloat();
+                }
+                if (axis == "z"){
+                    z = uConsole.GetFloat();
+                }
+            }
+            else {
+                x = uConsole.GetFloat();
+                y = uConsole.GetFloat();
+                z = uConsole.GetFloat();
+            }
+
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 var obj = SandboxSelectionSet.m_Items[i];
                 CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                
                 if (component != null){
                     string orig_scale = component.gameObject.transform.localScale.ToString();
-                    Vector3 new_scale = new Vector3(component.gameObject.transform.localScale.x, component.gameObject.transform.localScale.y, z);
+                    if (x == -1e16f) x = component.gameObject.transform.localScale.x;
+                    if (y == -1e16f) y = component.gameObject.transform.localScale.y;
+                    if (z == -1e16f) z = component.gameObject.transform.localScale.z;
+                    Vector3 new_scale = new Vector3(x, y, z);
                     component.gameObject.transform.localScale = new_scale;
-                    
                     uConsole.Log(orig_scale + " -> " + component.gameObject.transform.localScale.ToString());
                 }
 

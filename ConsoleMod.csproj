@@ -30,5 +30,8 @@
 		<Reference Include="ConfigurationManager">
 			<HintPath>../Poly Bridge 2/BepInEx/plugins/ConfigurationManager.dll</HintPath>
 		</Reference>
+        <Reference Include="Unity.TextMeshPro">
+            <HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/Unity.TextMeshPro.dll</HintPath>
+        </Reference>
 	</ItemGroup>
 </Project>
