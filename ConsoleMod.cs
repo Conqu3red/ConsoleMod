@@ -8,6 +8,12 @@ using System.Reflection;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using PolyPhysics.Viewers;
+using Poly.Physics;
+using Poly.Math;
+using PolyPhysics;
+using Common.Class;
+using Common.Extension;
+using TMPro;
 
 namespace ConsoleMod
 {
@@ -21,13 +27,25 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.2.0";
+            PluginVersion = "0.3.0";
         public static ConfigDefinition
-            modEnabledDef = new ConfigDefinition("Console", "Enabled");
+            modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
+            recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
+            frameByFrameDef = new ConfigDefinition("Smooth Playback", "Frame By Frame Mode"),
+            stepFrameDef = new ConfigDefinition("Smooth Playback", "Step Frame"),
+            PauseOnSimStartDef = new ConfigDefinition("Smooth Playback", "Pause On Sim Start");
+
         public static ConfigEntry<bool>
-            modEnabled;
+            modEnabled,
+            recenterEnabled,
+            frameByFrame,
+            PauseOnSimStart;
+        public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut>
+            stepFrame;
 
         public static ConsoleMod instance;
+
+        public static bool PauseNextFrame = false;
         void Awake()
         {
 			if (instance == null) instance = this;
@@ -43,14 +61,24 @@ namespace ConsoleMod
             modEnabled = Config.Bind(modEnabledDef, true, new ConfigDescription("Enable Mod"));
             modEnabled.SettingChanged += onEnableDisable;
 
+            recenterEnabled = Config.Bind(recenterEnabledDef, true, new ConfigDescription("Enable or disable the recnter button"));
+            frameByFrame = Config.Bind(frameByFrameDef, false, new ConfigDescription("Frame By Frame Mode"));
+            stepFrame = Config.Bind(stepFrameDef, new BepInEx.Configuration.KeyboardShortcut(KeyCode.L), new ConfigDescription("Step Frame"));
+            PauseOnSimStart = Config.Bind(PauseOnSimStartDef, false, new ConfigDescription("Pause Simulation Straight away upon simulation start"));
+
             harmony = new Harmony("org.bepinex.plugins.ConsoleCinematicCamera");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             Logger.LogInfo("Console Initiated.");
             // ConsoleCommands.Init();
             
             PolyTechMain.registerMod(this);
-
-            
+        }
+        [HarmonyPatch(typeof(GameManager), "StartManual")]
+        public static class StartPatch {
+            public static void GameStartPostfix(){
+                //SandboxInputField test =  GameUI.m_Instance.m_SandboxEditCustomShape.gameObject.AddComponent<SandboxInputField>() as SandboxInputField;
+                //test.name = "injected"; // doesn't work
+            }
         }
 
         public void onEnableDisable(object sender, EventArgs e)
@@ -85,7 +113,7 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("version", "show uConsole version", new uConsole.DebugCommand(mod_ver));
 
                 uConsole.RegisterCommand("popup_test", new uConsole.DebugCommand(popup_test));
-                uConsole.RegisterCommand("set_cheat", new uConsole.DebugCommand(toggleCheat));
+                //uConsole.RegisterCommand("set_cheat", new uConsole.DebugCommand(toggleCheat));
                 
                 // modded Cinematic Camera
                 uConsole.RegisterCommand("cin_add", new uConsole.DebugCommand(cin_add));
@@ -93,24 +121,25 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("cin_modify", new uConsole.DebugCommand(cin_modify));
                 uConsole.RegisterCommand("cin_restore", new uConsole.DebugCommand(cin_restore));
                 uConsole.RegisterCommand("cin_list", new uConsole.DebugCommand(cin_log));
+                uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
+                uConsole.RegisterCommand("cin_mode", new uConsole.DebugCommand(cin_mode));
+
+                // custom shape modifiers
                 
-                
-                // z modifiers 
-                
-                uConsole.RegisterCommand("set_z", new uConsole.DebugCommand(set_z));
-                uConsole.RegisterCommand("set_z_scale", new uConsole.DebugCommand(set_z_scale));
-                uConsole.RegisterCommand("shuffle_z", new uConsole.DebugCommand(shuffle_z));
+                uConsole.RegisterCommand("set_pos", new uConsole.DebugCommand(set_pos));
+                uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
+                uConsole.RegisterCommand("shuffle_pos", new uConsole.DebugCommand(shuffle_pos));
 
 
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
                 uConsole.RegisterCommand("bridge_reveal", new uConsole.DebugCommand(bridge_reveal));
-                uConsole.RegisterCommand("cam_info", new uConsole.DebugCommand(cam_info));
-                uConsole.RegisterCommand("cin_start", new uConsole.DebugCommand(cin_start));
-                uConsole.RegisterCommand("cin_start_restore", new uConsole.DebugCommand(cin_start_restore));
-                uConsole.RegisterCommand("cin_ease", new uConsole.DebugCommand(cin_ease));
-                uConsole.RegisterCommand("cin_end", new uConsole.DebugCommand(cin_end));
-                uConsole.RegisterCommand("cin_end_restore", new uConsole.DebugCommand(cin_end_restore));
-                uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
+                //uConsole.RegisterCommand("cam_info", new uConsole.DebugCommand(cam_info));
+                //uConsole.RegisterCommand("cin_start", new uConsole.DebugCommand(cin_start));
+                //uConsole.RegisterCommand("cin_start_restore", new uConsole.DebugCommand(cin_start_restore));
+                //uConsole.RegisterCommand("cin_ease", new uConsole.DebugCommand(cin_ease));
+                //uConsole.RegisterCommand("cin_end", new uConsole.DebugCommand(cin_end));
+                //uConsole.RegisterCommand("cin_end_restore", new uConsole.DebugCommand(cin_end_restore));
+                //uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
                 uConsole.RegisterCommand("vehicle_show_polygon_shapes", new uConsole.DebugCommand(vehicle_show_polygon_shapes));
                 
             }
@@ -170,51 +199,133 @@ namespace ConsoleMod
         }
 
 
-        private static void set_z(){
-            float z = uConsole.GetFloat();
+        private static void set_pos(){
+            // Usage:
+            // set_pos <axis> <value>
+            // set_pos <x> <y> <z>
+            
+            float x = -1e16f, y = -1e16f, z = -1e16f;
+            string axis;
+            if (
+                (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
+                (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
+            ){
+                uConsole.Log($"Usage:\nset_pos <axis> <value>\nset_pos <x> <y> <z>");
+                return;
+            }
+            if (!uConsole.NextParameterIsFloat()){
+                axis = uConsole.GetString().ToLower();
+                if (axis == "x"){
+                    x = uConsole.GetFloat();
+                }
+                if (axis == "y"){
+                    y = uConsole.GetFloat();
+                }
+                if (axis == "z"){
+                    z = uConsole.GetFloat();
+                }
+            }
+            else {
+                x = uConsole.GetFloat();
+                y = uConsole.GetFloat();
+                z = uConsole.GetFloat();
+            }
+
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 var obj = SandboxSelectionSet.m_Items[i];
                 CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                
                 if (component != null){
                     string orig_pos = component.gameObject.transform.position.ToString();
-                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y, z);
+                    if (x == -1e16f) x = component.gameObject.transform.position.x;
+                    if (y == -1e16f) y = component.gameObject.transform.position.y;
+                    if (z == -1e16f) z = component.gameObject.transform.position.z;
+                    Vector3 new_pos = new Vector3(x, y, z);
                     component.gameObject.transform.position = new_pos;
                     uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
                 }
 
             }
         }
-        private static void shuffle_z(){
-            float z_start = 5f;
-            float z_end = 100f;
-            float z;
-            if (uConsole.GetNumParameters() == 2){
-                z_start = uConsole.GetFloat();
-                z_end = uConsole.GetFloat();
+        private static void shuffle_pos(){
+            // Usage:
+            // shuffle_pos <axis> <start> <end>
+            
+            float x = -1e16f, y = -1e16f, z = -1e16f;
+            float start, end;
+            string axis;
+            if (uConsole.GetNumParameters() == 0 || uConsole.GetNumParameters() == 2){
+                uConsole.Log($"Usage:\nshuffle_pos <axis> <value>");
+                return;
             }
+            start = uConsole.GetFloat();
+            end = uConsole.GetFloat();
+            axis = uConsole.GetString().ToLower();
+            
+            if (axis == "x") x = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+            if (axis == "y") y = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+            if (axis == "z") z = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 var obj = SandboxSelectionSet.m_Items[i];
                 CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                
                 if (component != null){
-                    z = UnityEngine.Random.Range(z_start, z_end);
                     string orig_pos = component.gameObject.transform.position.ToString();
-                    Vector3 new_pos = new Vector3(component.gameObject.transform.position.x, component.gameObject.transform.position.y, z);
+                    if (x == -1e16f) x = component.gameObject.transform.position.x;
+                    if (y == -1e16f) y = component.gameObject.transform.position.y;
+                    if (z == -1e16f) z = component.gameObject.transform.position.z;
+                    Vector3 new_pos = new Vector3(x, y, z);
                     component.gameObject.transform.position = new_pos;
                     uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
                 }
 
             }
         }
-        private static void set_z_scale(){
-            float z = uConsole.GetFloat();
+
+        private static void set_scale(){
+            // Usage:
+            // set_scale <axis> <value>
+            // set_scale <x> <y> <z>
+            
+            float x = -1e16f, y = -1e16f, z = -1e16f;
+            string axis;
+            if (
+                (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
+                (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
+            ){
+                uConsole.Log($"Usage:\nset_scale <axis> <value>\nset_scale <x> <y> <z>");
+                return;
+            }
+            if (!uConsole.NextParameterIsFloat()){
+                axis = uConsole.GetString().ToLower();
+                if (axis == "x"){
+                    x = uConsole.GetFloat();
+                }
+                if (axis == "y"){
+                    y = uConsole.GetFloat();
+                }
+                if (axis == "z"){
+                    z = uConsole.GetFloat();
+                }
+            }
+            else {
+                x = uConsole.GetFloat();
+                y = uConsole.GetFloat();
+                z = uConsole.GetFloat();
+            }
+
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 var obj = SandboxSelectionSet.m_Items[i];
                 CustomShape component = obj.gameObject.GetComponent<CustomShape>();
+                
                 if (component != null){
                     string orig_scale = component.gameObject.transform.localScale.ToString();
-                    Vector3 new_scale = new Vector3(component.gameObject.transform.localScale.x, component.gameObject.transform.localScale.y, z);
+                    if (x == -1e16f) x = component.gameObject.transform.localScale.x;
+                    if (y == -1e16f) y = component.gameObject.transform.localScale.y;
+                    if (z == -1e16f) z = component.gameObject.transform.localScale.z;
+                    Vector3 new_scale = new Vector3(x, y, z);
                     component.gameObject.transform.localScale = new_scale;
-                    
                     uConsole.Log(orig_scale + " -> " + component.gameObject.transform.localScale.ToString());
                 }
 
@@ -295,6 +406,162 @@ namespace ConsoleMod
             ));
         }
 
+
+
+        [HarmonyPatch(typeof(BridgeJoints), "ApplySimulationResults")]
+        public static class JointRenderPath {
+            public static bool Prefix(){
+                if (frameByFrame.Value && modEnabled.Value){
+                    foreach (BridgeJoint bridgeJoint in BridgeJoints.m_Joints)
+		            {
+		            	if (bridgeJoint.gameObject.activeInHierarchy && bridgeJoint.m_PhysicsNode && bridgeJoint.m_PhysicsNode.handle && bridgeJoint.m_PhysicsNode.handle.world)
+		            	{
+		            		bridgeJoint.transform.position = bridgeJoint.m_PhysicsNode.pos;
+		            	}
+		            }
+                    return false;
+                }
+                return true;
+            }
+        }
+        [HarmonyPatch(typeof(Vehicle), "SyncVisual")]
+        public static class VehicleRenderPath {
+            public static bool Prefix(
+                ref Vehicle __instance, 
+                ref PolyPhysics.Vehicle ___m_Physics, 
+                ref VehicleSyncTarget[] ___m_SyncTargets
+            ){
+                if (frameByFrame.Value && modEnabled.Value){
+                    if (___m_Physics && ___m_SyncTargets != null && Bridge.IsSimulating())
+		            {
+		            	foreach (VehicleSyncTarget vehicleSyncTarget in ___m_SyncTargets)
+		            	{
+		            		if (vehicleSyncTarget && (vehicleSyncTarget.m_type == VehicleSyncTarget.Type.VisualMesh || vehicleSyncTarget.m_type == VehicleSyncTarget.Type.Invalid))
+		            		{
+		            			vehicleSyncTarget.Sync(false);
+		            		}
+		            	}
+		            }
+                    return false;
+                }
+                return true;
+            }
+        }
+        [HarmonyPatch(typeof(BridgeEdge), "UpdateManual")]
+        public static class BridgeEdgeRenderPatch {
+            public static bool Prefix(ref BridgeEdge __instance, ref bool ___m_ForceDisabled){
+                if (frameByFrame.Value && modEnabled.Value){
+                    Vector3 position = __instance.m_JointA.transform.position;
+		            Vector3 position2 = __instance.m_JointB.transform.position;
+		            Vector3 toDirection = position2 - position;
+		            float magnitude = toDirection.magnitude;
+		            if (__instance.m_PhysicsEdge && __instance.m_PhysicsEdge.handle && __instance.m_PhysicsEdge.node0 && __instance.m_PhysicsEdge.node0.handle && __instance.m_PhysicsEdge.node0.handle.world && __instance.m_PhysicsEdge.node1 && __instance.m_PhysicsEdge.node1.handle && __instance.m_PhysicsEdge.node1.handle.world)
+		            {
+		            	WorldObjectImpl handle = __instance.m_PhysicsEdge.handle;
+		            	//float currentFractionOfFixedFrame = SingletonMonoBehaviour<World>.instance.currentFractionOfFixedFrame;
+		            	Vec2 smoothPos = __instance.m_PhysicsEdge.node0.pos; //  Modifed from SmoothPos to pos
+		            	Vec2 smoothPos2 = __instance.m_PhysicsEdge.node1.pos; // Modifed from SmoothPos to pos
+		            	__instance.transform.position = 0.5f * (smoothPos + smoothPos2);
+		            	if (__instance.m_PhysicsEdge.areNodesReversedInPhysics)
+		            	{
+		            		Values.Swap<Vec2>(ref smoothPos, ref smoothPos2);
+		            	}
+		            	Vec2 vec = smoothPos2 - smoothPos;
+		            	float z = Mathf.Atan2(vec.y, vec.x) * 57.29578f;
+		            	__instance.transform.rotation = Quaternion.Euler(0f, 0f, z);
+		            	float magnitude2 = vec.magnitude;
+		            	__instance.m_MeshRenderer.transform.SetLocalScaleX(magnitude2);
+		            	__instance.m_HighlightFX.transform.SetLocalScaleX(magnitude2);
+		            	if (!handle.isEnabled && !___m_ForceDisabled)
+		            	{
+		            		if ((__instance.m_Material.m_MaterialType == BridgeMaterialType.ROPE || __instance.m_Material.m_MaterialType == BridgeMaterialType.CABLE) && BridgeRopes.m_BridgeRopes.Count > 0)
+		            		{
+		            			BridgeRopes.DisableRopeForEdge(__instance);
+		            		}
+		            		__instance.ForceDisable();
+		            	}
+		            }
+		            else if (!float.IsInfinity(magnitude))
+		            {
+		            	__instance.transform.position = 0.5f * (position + position2);
+		            	__instance.transform.rotation = Quaternion.FromToRotation(Vector3.right, toDirection);
+		            	__instance.m_MeshRenderer.transform.SetLocalScaleX(magnitude);
+		            	__instance.m_HighlightFX.transform.SetLocalScaleX(magnitude);
+		            }
+		            if (__instance.m_SpringCoilVisualization != null)
+		            {
+		            	__instance.m_SpringCoilVisualization.UpdateLinks();
+		            }
+		            if (__instance.m_HydraulicEdgeVisualization != null)
+		            {
+		            	__instance.m_HydraulicEdgeVisualization.UpdateTransform_Manual(__instance);
+		            }
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(GameStateSim), "Enter")]
+        public static class StartSimPatch {
+            public static void Postfix(GameState prevState){
+                if (modEnabled.Value && PauseOnSimStart.Value){
+                    SingletonMonoBehaviour<World>.instance.fastForwardToFrame = SingletonMonoBehaviour<World>.instance.frameCount + 1;
+                    PauseNextFrame = true;
+                }
+            }
+        }
+
+
+        [HarmonyPatch(typeof(GameStateSim), "UpdateManual")]
+        public static class StepFramePatch {
+            public static void Postfix(){
+                if (modEnabled.Value){
+                    if (stepFrame.Value.IsUp()){
+                        //GameUI.m_Instance.m_TopBar.OnPauseSim();
+                        //Time.timeScale = 0f;
+                        GameUI.m_Instance.m_TopBar.OnUnPauseSim();
+                        SingletonMonoBehaviour<World>.instance.fastForwardToFrame = SingletonMonoBehaviour<World>.instance.frameCount + 1;
+                        //GameUI.m_Instance.m_TopBar.OnPauseSim();
+                        //GameUI.m_Instance.m_TopBar.OnUnPauseSim();
+                        PauseNextFrame = true;
+                    }
+                }
+            }
+        }
+        [HarmonyPatch(typeof(PolyPhysics.World), "FixedUpdate_Manual")]
+        public static class PausePatch {
+            public static void Postfix(ref PolyPhysics.World __instance){
+                if (modEnabled.Value && Bridge.IsSimulating()){
+                    if (PauseNextFrame && __instance.frameCount -1 == __instance.fastForwardToFrame){
+                        GameUI.m_Instance.m_TopBar.OnPauseSim();
+                        PauseNextFrame = false;
+                    }
+                }
+            }
+        }
+
+
+
+
+
+
+
+        [HarmonyPatch(typeof(GameStateManager), "UpdateManual")]
+        public static class RecenterPatch {
+            public static void Postfix(){
+                if ((
+                    GameStateManager.GetState() == GameState.SANDBOX || 
+                    GameStateManager.GetState() == GameState.BUILD || 
+                    GameStateManager.GetState() == GameState.SIM
+                    ) && ConsoleMod.modEnabled.Value && !ConsoleMod.recenterEnabled.Value
+                    )
+		        {
+			        GameUI.m_Instance.m_Recenter.gameObject.SetActive(false);
+		        }
+            }
+        }
+
         public class CameraKeyFrame {
             public Vector3 m_StartPos;
 		    public Quaternion m_StartRot;
@@ -304,10 +571,18 @@ namespace ConsoleMod
             public bool m_Ease = false;
 
         }
+        public enum CinemaCameraModes {
+            ONE_DURATION,
+            MULTI_DURATION
+        }
+
         public static class ModdedCinemaCamera {
             public static List<CameraKeyFrame> keyFrames = new List<CameraKeyFrame> ();
             public static int current_start = 0;
             public static int current_end = 1;
+
+            public static CinemaCameraModes mode = CinemaCameraModes.ONE_DURATION;
+            public static float duration = 5;
 
             public static CatmullRomSpline InterpolateHandler = new CatmullRomSpline();
 
@@ -322,6 +597,9 @@ namespace ConsoleMod
             }
 
             public static void StartInterpolate(){
+                if (mode == CinemaCameraModes.ONE_DURATION){
+                    computeFromOneDuration();
+                }
                 restore(current_start);
                 CameraKeyFrame target = keyFrames[current_end];
 			    CameraInterpolate.SlerpTo(
@@ -340,7 +618,38 @@ namespace ConsoleMod
 		        PointsOfView.UpdatePivotBasedOnCamera();
 		        Cameras.SetOrthographicSize(cam.m_StartOrthographicSize);
             }
+            public static float distTo(int pos){
+                float dist = 0;
+                Vector3 current;
+                Vector3 prev = new Vector3();
+                for (var i = 0; i < 50; i++){
+                    if (i != 0){
+                        current = InterpolateHandler.Interpolate(pos, i/50);
+                        dist += Vector3.Distance(current, prev);
+                        prev = current;
+                    }
+                    else {
+                        prev = keyFrames[pos-1].m_StartPos;
+                    }
+                }
+                return dist;
+            }
+
+            public static void computeFromOneDuration(){
+                float total_dist = 0;
+                float small_dist = 0;
+                for (var i = 1; i < keyFrames.Count; i++){
+                    total_dist += distTo(i);
+                }
+                for (var i = 1; i < keyFrames.Count; i++){
+                    CameraKeyFrame endFrame = keyFrames[i];
+                    small_dist = distTo(i);
+                    //Debug.Log($"{i} {small_dist} {total_dist} {(small_dist/total_dist)*duration}");
+                    keyFrames[i].m_DurationSeconds = (small_dist/total_dist)*duration;
+                }
+            }
         }
+
         [HarmonyPatch(typeof(CinemaCamera), "StartInterpolate")]
         public static class StartInterpolatePath {
             public static bool Prefix(){
@@ -498,7 +807,35 @@ namespace ConsoleMod
             }
             
         }
-        
+
+        private static void cin_mode(){
+            switch (ModdedCinemaCamera.mode){
+                case (CinemaCameraModes.MULTI_DURATION):
+                    ModdedCinemaCamera.mode = CinemaCameraModes.ONE_DURATION;
+                    uConsole.Log("Set mode to ONE_DURATION (smoother)");
+                    return;
+                case (CinemaCameraModes.ONE_DURATION):
+                    ModdedCinemaCamera.mode = CinemaCameraModes.MULTI_DURATION;
+                    uConsole.Log("Set mode to MULTI_DURATION (control time taken to reach each point)");
+                    return;
+            }
+        }
+        private static void cin_duration()
+        {
+            if (ModdedCinemaCamera.mode == CinemaCameraModes.MULTI_DURATION){
+                uConsole.Log("Cannot set single duration when camera mode is MULTI_DURATION");
+            }
+            if (uConsole.GetNumParameters() == 0)
+            {
+                uConsole.Log("Duration is: " + ModdedCinemaCamera.duration.ToString() + "s");
+                return;
+            }
+            if (uConsole.GetNumParameters() != 1)
+            {
+                uConsole.Log("Usage is cin_duration <seconds>");
+            }
+            ModdedCinemaCamera.duration = uConsole.GetFloat();
+        }
 
         private static void cin_start()
         {
@@ -554,19 +891,19 @@ namespace ConsoleMod
         }
 
         // Token: 0x060058E4 RID: 22756
-        private static void cin_duration()
-        {
-            if (uConsole.GetNumParameters() == 0)
-            {
-                uConsole.Log("Duration is: " + CinemaCamera.m_DurationSeconds.ToString() + "s");
-                return;
-            }
-            if (uConsole.GetNumParameters() != 1)
-            {
-                uConsole.Log("Usage is cin_duration <seconds>");
-            }
-            CinemaCamera.m_DurationSeconds = uConsole.GetFloat();
-        }
+        //private static void cin_duration()
+        //{
+        //    if (uConsole.GetNumParameters() == 0)
+        //    {
+        //        uConsole.Log("Duration is: " + CinemaCamera.m_DurationSeconds.ToString() + "s");
+        //        return;
+        //    }
+        //    if (uConsole.GetNumParameters() != 1)
+        //    {
+        //        uConsole.Log("Usage is cin_duration <seconds>");
+        //    }
+        //    CinemaCamera.m_DurationSeconds = uConsole.GetFloat();
+        //}
 
         // Token: 0x060058E5 RID: 22757
         private static void vehicle_show_polygon_shapes()
