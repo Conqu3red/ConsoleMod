@@ -14,6 +14,7 @@ using PolyPhysics;
 using Common.Class;
 using Common.Extension;
 using TMPro;
+using UnityEngine.UI;
 
 namespace ConsoleMod
 {
@@ -27,7 +28,7 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.3.0";
+            PluginVersion = "0.3.1";
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
             recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
@@ -39,7 +40,9 @@ namespace ConsoleMod
             modEnabled,
             recenterEnabled,
             frameByFrame,
-            PauseOnSimStart;
+            PauseOnSimStart,
+            instantTrace,
+            constrainMovement;
         public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut>
             stepFrame;
 
@@ -52,6 +55,7 @@ namespace ConsoleMod
             // Use this if you wish to make the mod trigger cheat mode ingame.
             // Set this true if your mod effects physics or allows mods that you can't normally do.
             isCheat = false;
+            //shouldSaveData = true;
             // Set this to whether the mod is currently enabled or not.
             // Usually you want this to be true by default.
 
@@ -65,14 +69,38 @@ namespace ConsoleMod
             frameByFrame = Config.Bind(frameByFrameDef, false, new ConfigDescription("Frame By Frame Mode"));
             stepFrame = Config.Bind(stepFrameDef, new BepInEx.Configuration.KeyboardShortcut(KeyCode.L), new ConfigDescription("Step Frame"));
             PauseOnSimStart = Config.Bind(PauseOnSimStartDef, false, new ConfigDescription("Pause Simulation Straight away upon simulation start"));
+            instantTrace = Config.Bind("Miscellaneous", "Instant Trace Fill", false, "If enabled makes the trace tool fill instantly");
+            //constrainMovement = Config.Bind("Miscellaneous", "Contrain Movement", true, "Whether or not to constrain sandbox item movement (pb2 default is true)");
 
-            harmony = new Harmony("org.bepinex.plugins.ConsoleCinematicCamera");
+
+            harmony = new Harmony("org.bepinex.plugins.ConsoleMod");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             Logger.LogInfo("Console Initiated.");
             // ConsoleCommands.Init();
-            
             PolyTechMain.registerMod(this);
+            this.isEnabled = modEnabled.Value;
         }
+
+        //public override string getSettings(){
+        //    return "aaa";
+        //}
+        //public override void setSettings(string settings)
+        //{
+        //    Logger.LogInfo("settings: " + settings);
+        //}
+        //public override byte[] saveData(){
+        //    return new byte[] {1,2,3,4};
+        //}
+        //public override void loadData(byte[] bytes)
+        //{
+        //    Logger.LogInfo("custom save data:");
+        //    foreach (byte b in bytes){
+        //        Logger.LogInfo(b);
+        //    }
+        //}
+
+
+
         [HarmonyPatch(typeof(GameManager), "StartManual")]
         public static class StartPatch {
             public static void GameStartPostfix(){
@@ -127,10 +155,22 @@ namespace ConsoleMod
                 // custom shape modifiers
                 
                 uConsole.RegisterCommand("set_pos", new uConsole.DebugCommand(set_pos));
-                uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
+                uConsole.RegisterCommand("add_pos", new uConsole.DebugCommand(add_pos));
                 uConsole.RegisterCommand("shuffle_pos", new uConsole.DebugCommand(shuffle_pos));
+                
+                uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
+                uConsole.RegisterCommand("add_scale", new uConsole.DebugCommand(set_scale));
+                uConsole.RegisterCommand("shuffle_scale", new uConsole.DebugCommand(set_scale));
 
+                uConsole.RegisterCommand("set_rot", new uConsole.DebugCommand(set_rot));
+                uConsole.RegisterCommand("add_rot", new uConsole.DebugCommand(add_rot));
+                uConsole.RegisterCommand("shuffle_rot", new uConsole.DebugCommand(shuffle_rot));
 
+                uConsole.RegisterCommand("set_color", new uConsole.DebugCommand(set_color));
+
+                uConsole.RegisterCommand("create_concrete_pillar", new uConsole.DebugCommand(create_support_pillar));
+
+                
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
                 uConsole.RegisterCommand("bridge_reveal", new uConsole.DebugCommand(bridge_reveal));
                 //uConsole.RegisterCommand("cam_info", new uConsole.DebugCommand(cam_info));
@@ -141,7 +181,6 @@ namespace ConsoleMod
                 //uConsole.RegisterCommand("cin_end_restore", new uConsole.DebugCommand(cin_end_restore));
                 //uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
                 uConsole.RegisterCommand("vehicle_show_polygon_shapes", new uConsole.DebugCommand(vehicle_show_polygon_shapes));
-                
             }
         }
         [HarmonyPatch(typeof(uConsoleGUI))]
@@ -168,13 +207,6 @@ namespace ConsoleMod
             modEnabled.Value = false;
         }
 
-        // I have no idea how either of this functions work,
-        // so just talk to MoonlitJolty if you wanna know what to do this this.
-        // This returns a stringified version of the current mod settings.
-        public override string getSettings() { return ""; }
-        // This takes a stringified version of the mod settings and updates the settings to that.
-        public override void setSettings(string settings) { }
-
         private void InstantiateConsole()
         {
             GameObject gameObject = UnityEngine.Object.Instantiate<GameObject>(Main.m_Instance.m_ConsoleUI, Vector3.zero, Quaternion.identity);
@@ -198,145 +230,431 @@ namespace ConsoleMod
             PopUpMessage.DisplayOkOnly("Set Console mod cheat? to " + val.ToString(), null);
         }
 
+        public static void UpdateSandboxPositionUI(SandboxItem item)
+	    {
+	    	switch (item.m_Type)
+	    	{
+	    	case SandboxItemType.TERRAIN:
+	    		if (GameUI.m_Instance.m_SandboxEditTerrain.gameObject.activeInHierarchy)
+	    		{
+	    			TerrainIsland component = item.GetComponent<TerrainIsland>();
+	    			GameUI.m_Instance.m_SandboxEditTerrain.RefreshPosition(component);
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.ANCHOR:
+	    		if (GameUI.m_Instance.m_SandboxEditAnchor.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditAnchor.RefreshPosition(item.GetComponent<BridgeJoint>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.VEHICLE:
+	    		if (GameUI.m_Instance.m_SandboxEditVehicle.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditVehicle.RefreshPosition(item.GetComponent<Vehicle>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.VEHICLE_STOP_TRIGGER:
+	    		if (GameUI.m_Instance.m_SandboxEditVehicleStopTrigger.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditVehicleStopTrigger.RefreshPosition(item.GetComponent<VehicleStopTrigger>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.WATER:
+	    	case SandboxItemType.HYDRAULICS_PHASE:
+	    	case SandboxItemType.VEHICLE_RESTART_PHASE:
+	    		break;
+	    	case SandboxItemType.CHECKPOINT:
+	    		if (GameUI.m_Instance.m_SandboxEditCheckpoint.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditCheckpoint.RefreshPosition(item.GetComponent<Checkpoint>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.PLATFORM:
+	    		if (GameUI.m_Instance.m_SandboxEditPlatform.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditPlatform.RefreshPosition(item.GetComponent<Platform>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.RAMP:
+	    		if (GameUI.m_Instance.m_SandboxEditRamp.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditRamp.RefreshPosition(item.GetComponent<Ramp>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.FLYING_OBJECT:
+	    		if (GameUI.m_Instance.m_SandboxEditFlyingObject.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditFlyingObject.RefreshPosition(item.GetComponent<FlyingObject>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.ROCK:
+	    		if (GameUI.m_Instance.m_SandboxEditRock.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditRock.RefreshPosition(item.GetComponent<Rock>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.ZED_AXIS_VEHICLE:
+	    		if (GameUI.m_Instance.m_SandboxEditZedAxisVehicle.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditZedAxisVehicle.RefreshPosition(item.GetComponent<ZedAxisVehicle>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.CUSTOM_SHAPE:
+	    		if (GameUI.m_Instance.m_SandboxEditCustomShape.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditCustomShape.RefreshPosition(item.GetComponent<CustomShape>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.SUPPORT_PILLAR:
+	    		if (GameUI.m_Instance.m_SandboxEditSupportPillar.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditSupportPillar.RefreshPosition(item.GetComponent<SupportPillar>());
+	    			return;
+	    		}
+	    		break;
+	    	case SandboxItemType.PILLAR:
+	    		if (GameUI.m_Instance.m_SandboxEditPillar.gameObject.activeInHierarchy)
+	    		{
+	    			GameUI.m_Instance.m_SandboxEditPillar.RefreshPosition(item.GetComponent<Pillar>());
+	    			return;
+	    		}
+	    		break;
+	    	default:
+	    		Debug.LogWarningFormat("UpdateSandboxPositionUI called with unsupported SandboxItemType {0}", new object[]
+	    		{
+	    			item.m_Type
+	    		});
+	    		break;
+	    	}
+            if (item){
+                item.SetOffsetFromPointer(Input.mousePosition);
+            }
+	    }
 
+        public enum SandboxCommandType {
+            SET,
+            ADD,
+            SHUFFLE
+        }
+        private static void processSandboxCommand(string commandName, SandboxCommandType commandType){
+            float x = -1e16f, y = -1e16f, z = -1e16f;
+            string axis;
+            if (commandType == SandboxCommandType.SHUFFLE){
+                float start, end;
+                if (uConsole.GetNumParameters() == 0 || uConsole.GetNumParameters() == 2){
+                    uConsole.Log($"Usage:\n{commandName} <axis> <value>");
+                    return;
+                }
+                start = uConsole.GetFloat();
+                end = uConsole.GetFloat();
+                axis = uConsole.GetString().ToLower();
+
+                if (axis == "x") x = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+                if (axis == "y") y = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+                if (axis == "z") z = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
+
+                }
+            else {
+                if (
+                    (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
+                    (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
+                ){
+                    uConsole.Log($"Usage:\n{commandName} <axis> <value>\n{commandName} <x> <y> <z>");
+                    return;
+                }
+                if (!uConsole.NextParameterIsFloat()){
+                    axis = uConsole.GetString().ToLower();
+                    if (axis == "x"){
+                        x = uConsole.GetFloat();
+                    }
+                    if (axis == "y"){
+                        y = uConsole.GetFloat();
+                    }
+                    if (axis == "z"){
+                        z = uConsole.GetFloat();
+                    }
+                }
+                else {
+                    x = uConsole.GetFloat();
+                    y = uConsole.GetFloat();
+                    z = uConsole.GetFloat();
+                }
+            }
+
+            Vector3 v = new Vector3(x,y,z);
+            if (commandName.EndsWith("pos")) changePos(v, commandType);
+            if (commandName.EndsWith("scale")) changeScale(v, commandType);
+            if (commandName.EndsWith("rot")) changeRot(v, commandType);
+
+        }
+
+        private static void changePos(Vector3 pos, SandboxCommandType commandType){
+            
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                SandboxItem sandboxItem = SandboxSelectionSet.m_Items[i];
+                Vector3 new_pos;
+                string orig_pos = sandboxItem.transform.position.ToString();
+                if (commandType == SandboxCommandType.ADD){
+                    new_pos = new Vector3(
+                        pos.x == -1e16f ? sandboxItem.transform.position.x : sandboxItem.transform.position.x + pos.x, 
+                        pos.y == -1e16f ? sandboxItem.transform.position.y : sandboxItem.transform.position.y + pos.y, 
+                        pos.z == -1e16f ? sandboxItem.transform.position.z : sandboxItem.transform.position.z + pos.z
+                    );
+                }
+                else {
+                    new_pos = new Vector3(
+                        pos.x == -1e16f ? sandboxItem.transform.position.x : pos.x, 
+                        pos.y == -1e16f ? sandboxItem.transform.position.y : pos.y, 
+                        pos.z == -1e16f ? sandboxItem.transform.position.z : pos.z
+                    );
+                }
+                
+                sandboxItem.transform.position = new_pos;
+                uConsole.Log(orig_pos + " -> " + sandboxItem.gameObject.transform.position.ToString());
+                
+                if (sandboxItem.m_Type == SandboxItemType.ANCHOR || sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE)
+			    {
+			    	BridgeEdges.UpdateTransforms();
+			    }
+			    if (sandboxItem.m_Type == SandboxItemType.TERRAIN && sandboxItem.GetComponent<TerrainIsland>().m_TerrainIslandType == TerrainIslandType.Bookend)
+			    {
+			    	WorldBounds.Calculate(GameSettings.WorldWidth(), GameSettings.WorldMinY(), GameSettings.WorldMaxY());
+			    }
+                UpdateSandboxPositionUI(sandboxItem);
+
+            }
+        }
+
+        private static void changeScale(Vector3 scale, SandboxCommandType commandType){
+            
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                SandboxItem sandboxItem = SandboxSelectionSet.m_Items[i];
+
+                
+                if (sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE ||
+                    sandboxItem.m_Type == SandboxItemType.ROCK || 
+                    sandboxItem.m_Type == SandboxItemType.FLYING_OBJECT ||
+                    sandboxItem.m_Type == SandboxItemType.SUPPORT_PILLAR
+                ){
+                    Vector3 new_scale;
+                    string orig_scale = sandboxItem.transform.localScale.ToString();
+                    if (commandType == SandboxCommandType.ADD){
+                        new_scale = new Vector3(
+                            scale.x == -1e16f ? sandboxItem.transform.localScale.x : sandboxItem.transform.localScale.x + scale.x, 
+                            scale.y == -1e16f ? sandboxItem.transform.localScale.y : sandboxItem.transform.localScale.y + scale.y, 
+                            scale.z == -1e16f ? sandboxItem.transform.localScale.z : sandboxItem.transform.localScale.z + scale.z
+                        );
+                    }
+                    else {
+                        new_scale = new Vector3(
+                            scale.x == -1e16f ? sandboxItem.transform.localScale.x : scale.x, 
+                            scale.y == -1e16f ? sandboxItem.transform.localScale.y : scale.y, 
+                            scale.z == -1e16f ? sandboxItem.transform.localScale.z : scale.z
+                        );
+                    }
+
+                    sandboxItem.transform.localScale = new_scale;
+                    uConsole.Log(orig_scale + " -> " + sandboxItem.gameObject.transform.localScale.ToString());
+
+                    if (sandboxItem.m_Type == SandboxItemType.ANCHOR || sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE)
+			        {
+			        	BridgeEdges.UpdateTransforms();
+			        }
+			        if (sandboxItem.m_Type == SandboxItemType.TERRAIN && sandboxItem.GetComponent<TerrainIsland>().m_TerrainIslandType == TerrainIslandType.Bookend)
+			        {
+			        	WorldBounds.Calculate(GameSettings.WorldWidth(), GameSettings.WorldMinY(), GameSettings.WorldMaxY());
+			        }
+                    UpdateSandboxPositionUI(sandboxItem);
+                }
+            }
+        }
+
+        private static void changeRot(Vector3 rot, SandboxCommandType commandType){
+            float x = rot.x;
+            float y = rot.y;
+            float z = rot.z;
+            
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                SandboxItem sandboxItem = SandboxSelectionSet.m_Items[i];
+                
+                if (sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE || sandboxItem.m_Type == SandboxItemType.VEHICLE){
+                    string orig_rot = sandboxItem.transform.rotation.eulerAngles.ToString();
+                    Quaternion new_rot;
+                    if (commandType == SandboxCommandType.ADD){
+                        new_rot = Quaternion.Euler(
+                            x == -1e16f ? sandboxItem.transform.rotation.eulerAngles.x : sandboxItem.transform.rotation.eulerAngles.x + x, 
+                            y == -1e16f ? sandboxItem.transform.rotation.eulerAngles.y : sandboxItem.transform.rotation.eulerAngles.y + y, 
+                            z == -1e16f ? sandboxItem.transform.rotation.eulerAngles.z : sandboxItem.transform.rotation.eulerAngles.z + z
+                        );
+                    }
+                    else {
+                        new_rot = Quaternion.Euler(
+                            x == -1e16f ? sandboxItem.transform.rotation.eulerAngles.x : x, 
+                            y == -1e16f ? sandboxItem.transform.rotation.eulerAngles.y : y, 
+                            z == -1e16f ? sandboxItem.transform.rotation.eulerAngles.z : z
+                        );
+                    }
+                    sandboxItem.transform.rotation = new_rot;
+                    uConsole.Log(orig_rot + " -> " + sandboxItem.gameObject.transform.rotation.eulerAngles.ToString());
+                }
+                if (sandboxItem.m_Type == SandboxItemType.ANCHOR || sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE)
+			    {
+			    	BridgeEdges.UpdateTransforms();
+			    }
+			    if (sandboxItem.m_Type == SandboxItemType.TERRAIN && sandboxItem.GetComponent<TerrainIsland>().m_TerrainIslandType == TerrainIslandType.Bookend)
+			    {
+			    	WorldBounds.Calculate(GameSettings.WorldWidth(), GameSettings.WorldMinY(), GameSettings.WorldMaxY());
+			    }
+                UpdateSandboxPositionUI(sandboxItem);
+
+            }
+        }
+
+        public static void changeColor(Color color, SandboxCommandType commandType){
+            
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                CustomShape sandboxItem = SandboxSelectionSet.m_Items[i].GetComponent<CustomShape>();
+                
+                if (sandboxItem){
+                    string orig_color = sandboxItem.transform.rotation.ToString();
+                    Color new_color;
+                    if (commandType == SandboxCommandType.ADD){
+                        new_color = new Color(
+                            color.r == -1e16f ? sandboxItem.m_Color.r : sandboxItem.m_Color.r + color.r, 
+                            color.g == -1e16f ? sandboxItem.m_Color.g : sandboxItem.m_Color.g + color.g, 
+                            color.b == -1e16f ? sandboxItem.m_Color.b : sandboxItem.m_Color.b + color.b
+                        );
+                    }
+                    else {
+                        new_color = new Color(
+                            color.r == -1e16f ? sandboxItem.m_Color.r : color.r, 
+                            color.g == -1e16f ? sandboxItem.m_Color.g : color.g, 
+                            color.b == -1e16f ? sandboxItem.m_Color.b : color.b
+                        );
+                    }
+                    sandboxItem.SetColor(new_color);
+			        sandboxItem.m_OriginalColor = new_color;
+                    uConsole.Log(orig_color + " -> " + new_color.ToString());
+                }
+            }
+        }
+          
+        
+        
         private static void set_pos(){
             // Usage:
             // set_pos <axis> <value>
             // set_pos <x> <y> <z>
-            
-            float x = -1e16f, y = -1e16f, z = -1e16f;
-            string axis;
-            if (
-                (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
-                (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
-            ){
-                uConsole.Log($"Usage:\nset_pos <axis> <value>\nset_pos <x> <y> <z>");
-                return;
-            }
-            if (!uConsole.NextParameterIsFloat()){
-                axis = uConsole.GetString().ToLower();
-                if (axis == "x"){
-                    x = uConsole.GetFloat();
-                }
-                if (axis == "y"){
-                    y = uConsole.GetFloat();
-                }
-                if (axis == "z"){
-                    z = uConsole.GetFloat();
-                }
-            }
-            else {
-                x = uConsole.GetFloat();
-                y = uConsole.GetFloat();
-                z = uConsole.GetFloat();
-            }
-
-            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
-                var obj = SandboxSelectionSet.m_Items[i];
-                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
-                
-                if (component != null){
-                    string orig_pos = component.gameObject.transform.position.ToString();
-                    if (x == -1e16f) x = component.gameObject.transform.position.x;
-                    if (y == -1e16f) y = component.gameObject.transform.position.y;
-                    if (z == -1e16f) z = component.gameObject.transform.position.z;
-                    Vector3 new_pos = new Vector3(x, y, z);
-                    component.gameObject.transform.position = new_pos;
-                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
-                }
-
-            }
+            processSandboxCommand("set_pos", SandboxCommandType.SET);
         }
+
+        private static void add_pos(){
+            // Usage:
+            // add_pos <axis> <value>
+            // add_pos <x> <y> <z>
+            processSandboxCommand("add_pos", SandboxCommandType.ADD);
+        }
+
         private static void shuffle_pos(){
             // Usage:
             // shuffle_pos <axis> <start> <end>
-            
-            float x = -1e16f, y = -1e16f, z = -1e16f;
-            float start, end;
-            string axis;
-            if (uConsole.GetNumParameters() == 0 || uConsole.GetNumParameters() == 2){
-                uConsole.Log($"Usage:\nshuffle_pos <axis> <value>");
-                return;
-            }
-            start = uConsole.GetFloat();
-            end = uConsole.GetFloat();
-            axis = uConsole.GetString().ToLower();
-            
-            if (axis == "x") x = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
-            if (axis == "y") y = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
-            if (axis == "z") z = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
-
-            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
-                var obj = SandboxSelectionSet.m_Items[i];
-                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
-                
-                if (component != null){
-                    string orig_pos = component.gameObject.transform.position.ToString();
-                    if (x == -1e16f) x = component.gameObject.transform.position.x;
-                    if (y == -1e16f) y = component.gameObject.transform.position.y;
-                    if (z == -1e16f) z = component.gameObject.transform.position.z;
-                    Vector3 new_pos = new Vector3(x, y, z);
-                    component.gameObject.transform.position = new_pos;
-                    uConsole.Log(orig_pos + " -> " + component.gameObject.transform.position.ToString());
-                }
-
-            }
+            processSandboxCommand("shuffle_pos", SandboxCommandType.SHUFFLE);
         }
 
         private static void set_scale(){
             // Usage:
             // set_scale <axis> <value>
             // set_scale <x> <y> <z>
+            processSandboxCommand("set_scale", SandboxCommandType.SET);
             
-            float x = -1e16f, y = -1e16f, z = -1e16f;
-            string axis;
-            if (
-                (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
-                (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
-            ){
-                uConsole.Log($"Usage:\nset_scale <axis> <value>\nset_scale <x> <y> <z>");
+        }
+
+        private static void add_scale(){
+            // Usage:
+            // add_scale <axis> <value>
+            // add_scale <x> <y> <z>
+            processSandboxCommand("add_scale", SandboxCommandType.ADD);
+        }
+
+        private static void shuffle_scale(){
+            // Usage:
+            // shuffle_scale <axis> <start> <end>
+            processSandboxCommand("shuffle_scale", SandboxCommandType.SHUFFLE);
+            
+        }
+
+        private static void set_rot(){
+            // Usage:
+            // set_rot <axis> <value>
+            // set_rot <x> <y> <z>
+            processSandboxCommand("set_rot", SandboxCommandType.SET);
+        }
+
+        private static void add_rot(){
+            // Usage:
+            // add_rot <axis> <value>
+            // add_rot <x> <y> <z>
+            processSandboxCommand("add_rot", SandboxCommandType.ADD);
+        }
+
+        private static void shuffle_rot(){
+            // Usage:
+            // shuffle_rot <axis> <value>
+            // shuffle_rot <x> <y> <z>
+            processSandboxCommand("shuffle_rot", SandboxCommandType.SHUFFLE);
+        }
+
+        private static void set_color(){
+            // Usage:
+            // set_color <hex_color>
+            if (uConsole.GetNumParameters() != 1){
+                uConsole.Log("Usage: set_color <hex_color>");
                 return;
             }
-            if (!uConsole.NextParameterIsFloat()){
-                axis = uConsole.GetString().ToLower();
-                if (axis == "x"){
-                    x = uConsole.GetFloat();
-                }
-                if (axis == "y"){
-                    y = uConsole.GetFloat();
-                }
-                if (axis == "z"){
-                    z = uConsole.GetFloat();
-                }
+            string hex_color = uConsole.GetString();
+            Color color;
+            if (!ColorUtility.TryParseHtmlString(hex_color, out color)){
+                uConsole.Log("Usage: set_color <hex_color>");
+                return;
             }
-            else {
-                x = uConsole.GetFloat();
-                y = uConsole.GetFloat();
-                z = uConsole.GetFloat();
-            }
+            changeColor(color, SandboxCommandType.SET);
+        }
 
-            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
-                var obj = SandboxSelectionSet.m_Items[i];
-                CustomShape component = obj.gameObject.GetComponent<CustomShape>();
-                
-                if (component != null){
-                    string orig_scale = component.gameObject.transform.localScale.ToString();
-                    if (x == -1e16f) x = component.gameObject.transform.localScale.x;
-                    if (y == -1e16f) y = component.gameObject.transform.localScale.y;
-                    if (z == -1e16f) z = component.gameObject.transform.localScale.z;
-                    Vector3 new_scale = new Vector3(x, y, z);
-                    component.gameObject.transform.localScale = new_scale;
-                    uConsole.Log(orig_scale + " -> " + component.gameObject.transform.localScale.ToString());
-                }
+        private static void create_support_pillar(){
+            string prefabName = "ConcretePillar_Prefab";
+            if (GameStateManager.GetState() != GameState.SANDBOX) return;
+            Vector3 pos = Cameras.MainCamera().ScreenToWorldPoint(Input.mousePosition);
+            SupportPillar pillar = SupportPillars.CreateSupportPillar(Prefabs.m_PrefabsDict[prefabName], pos, new Quaternion(0,0,0,1));
+            UpdateSandboxPositionUI(pillar.m_SandboxItem);
+            uConsole.Log("Created concrete pillar at mouse position");
+        }
 
+        [HarmonyPatch(typeof(SandboxSelectionSet), "ConstrainTargetPos")]
+        private static class ConstrainTargetPosPatch {
+            private static void Prefix(SandboxItem item, Vector3 currentPos, Vector3 targetPos, Vector3 __result){
+                //if (constrainMovement.Value) return true;
+                //__result = targetPos;
+                //return false;
             }
         }
+
         
         private static void popup_test() 
         {
             GameUI.ShowMessage(ScreenMessageLocation.TOP_LEFT, "hey", 5f);
             PopUpMessage.DisplayOkOnly("ok only", null);
-            PopUpMessage.Display("ok and cancel", null);
+            PopUpMessage.Display("ok only", null);
             PopUpMessage.Display("ok and cancel", null, () => {});
             PopUpWarning.Display("PopUpWarning");
             PopUpTwoChoices.Display(
@@ -922,6 +1240,13 @@ namespace ConsoleMod
                 Bridge.m_DebugVisualizePolygonShapesForVehicles = uConsole.GetBool();
             }
             uConsole.Log("Vehicle show polygon shapes " + (Bridge.m_DebugVisualizePolygonShapesForVehicles ? "Enabled" : "Disabled"));
+        }
+
+        [HarmonyPatch(typeof(BridgeTrace), "Fill")]
+        public static class TracePatch {
+            public static void Postfix(float maxEdgeLength){
+                if (modEnabled.Value && instantTrace.Value) BridgeTrace.CompleteFillingInstantly();
+            }
         }
         
         Harmony harmony;

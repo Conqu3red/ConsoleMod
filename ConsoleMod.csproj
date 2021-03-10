@@ -24,6 +24,9 @@
 		<Reference Include="UnityEngine">
 			<HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/UnityEngine.dll</HintPath>
 		</Reference>
+        <Reference Include="UnityEngine.UI">
+			<HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/UnityEngine.UI.dll</HintPath>
+		</Reference>
 		<Reference Include="UnityEngine.CoreModule">
 			<HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
 		</Reference>
