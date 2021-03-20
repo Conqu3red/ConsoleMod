@@ -36,5 +36,11 @@
         <Reference Include="Unity.TextMeshPro">
             <HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/Unity.TextMeshPro.dll</HintPath>
         </Reference>
+        <Reference Include="Vectrosity">
+            <HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/Vectrosity.dll</HintPath>
+        </Reference>
+        <Reference Include="UnityEngine.UnityWebRequestModule">
+            <HintPath>../Poly Bridge 2/Poly Bridge 2_Data/Managed/UnityEngine.UnityWebRequestModule.dll</HintPath>
+        </Reference>
 	</ItemGroup>
 </Project>

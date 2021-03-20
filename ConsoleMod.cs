@@ -15,6 +15,9 @@ using Common.Class;
 using Common.Extension;
 using TMPro;
 using UnityEngine.UI;
+using Vectrosity;
+using UnityEngine.Networking;
+//using UnityEngine.UnityWebRequestModule;
 
 namespace ConsoleMod
 {
@@ -42,13 +45,21 @@ namespace ConsoleMod
             frameByFrame,
             PauseOnSimStart,
             instantTrace,
-            constrainMovement;
+            constrainMovement,
+            superZoom;
         public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut>
             stepFrame;
+        public static ConfigEntry<float> movementPrecision;
 
         public static ConsoleMod instance;
 
         public static bool PauseNextFrame = false;
+        public static MethodInfo
+            CalculateTargetPos,
+            RefreshEdgeTransforms,
+            IsJointAtInvalidLocation,
+            AllEdgesValidLength;
+        public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut> consoleShortcut;
         void Awake()
         {
 			if (instance == null) instance = this;
@@ -70,8 +81,12 @@ namespace ConsoleMod
             stepFrame = Config.Bind(stepFrameDef, new BepInEx.Configuration.KeyboardShortcut(KeyCode.L), new ConfigDescription("Step Frame"));
             PauseOnSimStart = Config.Bind(PauseOnSimStartDef, false, new ConfigDescription("Pause Simulation Straight away upon simulation start"));
             instantTrace = Config.Bind("Miscellaneous", "Instant Trace Fill", false, "If enabled makes the trace tool fill instantly");
-            //constrainMovement = Config.Bind("Miscellaneous", "Contrain Movement", true, "Whether or not to constrain sandbox item movement (pb2 default is true)");
-
+            constrainMovement = Config.Bind("Miscellaneous", "Contrain Movement", true, "Whether or not to constrain sandbox item movement (pb2 default is true)");
+            superZoom = Config.Bind("Miscellaneous", "Super Zoom", false, "Infinite Camera Zoom");
+            movementPrecision = Config.Bind("Miscellaneous", "Movement Precision", 0.01f, "Node Movement Precision");
+            
+            consoleShortcut = Config.Bind("Console", "Console Keybind", new BepInEx.Configuration.KeyboardShortcut(KeyCode.BackQuote), "Keybind to open the console");
+            consoleShortcut.SettingChanged += (o, e) => {uConsole.m_Instance.m_Activate = consoleShortcut.Value.MainKey;};
 
             harmony = new Harmony("org.bepinex.plugins.ConsoleMod");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -99,6 +114,19 @@ namespace ConsoleMod
         //    }
         //}
 
+        public bool flag = false;
+
+        void Update(){
+            //Theme.GreenScreenOn();
+            //if (flag){
+            //    Cameras.DisableThemePostProcessing();
+            //    Theme.m_Instance.m_SunLight.gameObject.SetActive(false);
+            //    Theme.m_Instance.m_BridgeLight.gameObject.SetActive(false);
+            //    Theme.m_Instance.m_ThemeStub.m_BeautifyProfile.saturate = 0f;
+            //}
+            
+
+        }
 
 
         [HarmonyPatch(typeof(GameManager), "StartManual")]
@@ -159,8 +187,8 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("shuffle_pos", new uConsole.DebugCommand(shuffle_pos));
                 
                 uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
-                uConsole.RegisterCommand("add_scale", new uConsole.DebugCommand(set_scale));
-                uConsole.RegisterCommand("shuffle_scale", new uConsole.DebugCommand(set_scale));
+                uConsole.RegisterCommand("add_scale", new uConsole.DebugCommand(add_scale));
+                uConsole.RegisterCommand("shuffle_scale", new uConsole.DebugCommand(shuffle_scale));
 
                 uConsole.RegisterCommand("set_rot", new uConsole.DebugCommand(set_rot));
                 uConsole.RegisterCommand("add_rot", new uConsole.DebugCommand(add_rot));
@@ -169,7 +197,8 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("set_color", new uConsole.DebugCommand(set_color));
 
                 uConsole.RegisterCommand("create_concrete_pillar", new uConsole.DebugCommand(create_support_pillar));
-
+                uConsole.RegisterCommand("user_info", new uConsole.DebugCommand(getUserInfo));
+                
                 
                 uConsole.RegisterCommand("bridge_hide", new uConsole.DebugCommand(bridge_hide));
                 uConsole.RegisterCommand("bridge_reveal", new uConsole.DebugCommand(bridge_reveal));
@@ -181,8 +210,116 @@ namespace ConsoleMod
                 //uConsole.RegisterCommand("cin_end_restore", new uConsole.DebugCommand(cin_end_restore));
                 //uConsole.RegisterCommand("cin_duration", new uConsole.DebugCommand(cin_duration));
                 uConsole.RegisterCommand("vehicle_show_polygon_shapes", new uConsole.DebugCommand(vehicle_show_polygon_shapes));
+                instance.flag = true;
+                uConsole.m_Instance.m_Activate = consoleShortcut.Value.MainKey;
+                
+                CalculateTargetPos = typeof(BridgeJointMovement).GetMethod("CalculateTargetPos", BindingFlags.NonPublic | BindingFlags.Static);
+                RefreshEdgeTransforms = typeof(BridgeJointMovement).GetMethod("RefreshEdgeTransforms", BindingFlags.NonPublic | BindingFlags.Static);
+                IsJointAtInvalidLocation = typeof(BridgeJointMovement).GetMethod("IsJointAtInvalidLocation", BindingFlags.NonPublic | BindingFlags.Static);
+                AllEdgesValidLength = typeof(BridgeJointMovement).GetMethod("AllEdgesValidLength", BindingFlags.NonPublic | BindingFlags.Static);
             }
         }
+
+        /*[HarmonyPatch(typeof(BridgeMaterials), "CreateMaterial")] // this is just a patch for getting some material data - keeping for reference
+        public static class t {
+            public static void Postfix(GameObject prefab){
+                GameObject gameObject = UnityEngine.Object.Instantiate<GameObject>(prefab);
+	            if (gameObject == null)
+	            {
+	            	//instance.Logger.LogInfo("null gameObject");
+                    return;
+	            }
+	            BridgeMaterial component = gameObject.GetComponent<BridgeMaterial>();
+	            if (component == null)
+	            {
+	            	//instance.Logger.LogInfo("null component");
+                    return;
+	            }
+            instance.Logger.LogInfo($"{prefab.name} {component.m_EdgeMaterial.baseMass}");
+            //instance.Logger.LogInfo($"{prefab.name} max length: {component.m_MaxLength} mass per meter: {component.m_EdgeMaterial.massPerMeter} price per meter: {component.m_PricePerMeter} strength: {component.m_EdgeMaterial.strength}");
+            }
+        }*/
+
+        /*[HarmonyPatch(typeof(ZedAxisVehicle), "StartSimulation")]
+        public static class ZedV { // gives area of zed axis vehicle outlines - keeping for reference
+
+            static float CalculateArea(List<Vector2> list){
+                float temp = 0;
+                int i = 0 ;
+                for(; i < list.Count ; i++){
+                if(i != list.Count - 1){
+                        float mulA = list[i].x * list[i+1].y;
+                        float mulB = list[i+1].x * list[i].y;
+                        temp = temp + ( mulA - mulB );
+                    }else{
+                        float mulA = list[i].x * list[0].y;
+                        float mulB = list[0].x * list[i].y;
+                        temp = temp + ( mulA - mulB );
+                    }
+                }
+                temp *= 0.5f;
+                return Mathf.Abs(temp);
+            }
+            public static void Postfix(ZedAxisVehicle __instance, VectorLine ___m_Outline){
+                List<Vector2> points = new List<Vector2>();
+                foreach (Vector3 p in ___m_Outline.points3){
+                    points.Add(new Vector2(p.x, p.y));
+                }
+                float area = CalculateArea(points);
+                instance.Logger.LogInfo($"{__instance.name} {area}");
+                //foreach (Vector3 p in ___m_Outline.points3){
+                //    instance.Logger.LogInfo($"  {p}");
+                //}
+            }
+        }*/
+
+        [HarmonyPatch(typeof(GameSettings), "MinOrthographicSize")]
+        public static class SuperZoomPatch {
+            public static void Postfix(ref float __result){
+                if (!superZoom.Value) return;
+                __result = 0f;
+            }
+        }
+        [HarmonyPatch(typeof(BridgeJointMovement), "MoveSelectedJoint")]
+        public static class MovementPrecisionPatch {
+            public static void Prefix(BridgeJoint moveJoint, Vector2 mouseScreenPos, Vector2 ___m_OffsetFromPointer){
+                List<BridgeEdge> edgesConnectedToJoint = BridgeEdges.GetEdgesConnectedToJoint(moveJoint);
+	            Vector3 vector = (Vector3)CalculateTargetPos.Invoke(null, new object[] {GameUI.SnapPosToGrid(Utils.V2toV3(Utils.GetWorldPointFromScreenPos(mouseScreenPos + ___m_OffsetFromPointer))), moveJoint, edgesConnectedToJoint}) - moveJoint.transform.position;
+	            Vector3 normalized = vector.normalized;
+	            moveJoint.m_MoveStartPos = moveJoint.transform.position;
+	            float num = Math.Max(0.000001f, movementPrecision.Value);
+	            float num2 = 0f;
+	            float magnitude = vector.magnitude;
+	            for (float num3 = 0f; num3 < magnitude; num3 += num)
+	            {
+	            	moveJoint.transform.position = GameUI.SnapPosToGrid(moveJoint.m_MoveStartPos + normalized * num3);
+	            	RefreshEdgeTransforms.Invoke(null, new object[] {edgesConnectedToJoint});
+	            	Budget.UpdateBridgeCost();
+	            	if (!(bool)IsJointAtInvalidLocation.Invoke(null, new object[] {moveJoint, edgesConnectedToJoint}) && (bool)AllEdgesValidLength.Invoke(null, new object[] {edgesConnectedToJoint}) && Budget.CanAffordToBuild())
+	            	{
+	            		num2 = num3;
+	            	}
+	            }
+	            if (Mathf.Approximately(num2, 0f))
+	            {
+	            	moveJoint.transform.position = moveJoint.m_MoveStartPos;
+	            	RefreshEdgeTransforms.Invoke(null, new object[] {edgesConnectedToJoint});
+	            	Budget.UpdateBridgeCost();
+	            	return;
+	            }
+	            moveJoint.transform.position = GameUI.SnapPosToGrid(moveJoint.m_MoveStartPos + normalized * num2);
+	            RefreshEdgeTransforms.Invoke(null, new object[] {edgesConnectedToJoint});
+	            Budget.UpdateBridgeCost();
+	            foreach (BridgeEdge bridgeEdge in edgesConnectedToJoint)
+	            {
+	            	bridgeEdge.UpdateJointSelectors();
+	            	bridgeEdge.ResolveJointSelectorOverlap();
+	            }
+	            GameStateBuild.ClearFirstBreakAttachedToJoint(moveJoint.m_Guid);
+            }
+        }
+
+
         [HarmonyPatch(typeof(uConsoleGUI))]
         [HarmonyPatch("Update")]
         public class PatchConsole
@@ -229,6 +366,89 @@ namespace ConsoleMod
             PolyTechMain.setCheat(instance, val);
             PopUpMessage.DisplayOkOnly("Set Console mod cheat? to " + val.ToString(), null);
         }
+
+        public static void getUserInfo(){
+            string id;
+            if (uConsole.GetNumParameters() == 1) id = uConsole.GetString();
+            else {
+                id = Workshop.GetLocalPlayerId();
+            }
+            Command.commandDefinitions[Command.Action.UserRead] = new Command.CommandDefinition(
+			    "user/{0}/read", 
+                Command.CommandDefinition.Verb.Get,
+                typeof(ResponseData.User)
+            );
+            Command command = new Command(Command.Action.UserRead, id);
+            string uri = DCServices.DCManager.apiAuthedPrefix + command.GetAPIUrl();
+            UnityWebRequest request = UnityWebRequest.Get(uri);
+            request.SetRequestHeader("Authorization", "Bearer " + DCServices.DCManager.m_Instance.m_CachedToken);
+	        request.timeout = 30;
+	        request.SendWebRequest().completed += processUserInfoRequest;
+            
+        }
+        public static void processUserInfoRequest(AsyncOperation asyncOperation){
+            UnityWebRequestAsyncOperation unityWebRequestAsyncOperation = (UnityWebRequestAsyncOperation)asyncOperation;
+			ResponseData.User responseData = new ResponseData.User();
+			if (unityWebRequestAsyncOperation.webRequest.isNetworkError || unityWebRequestAsyncOperation.webRequest.isHttpError)
+			{
+				if (unityWebRequestAsyncOperation.webRequest.isNetworkError)
+				{
+					Debug.LogWarningFormat("FAILURE CODE: Network Error REASON: {0}", new object[]
+					{
+						unityWebRequestAsyncOperation.webRequest.error
+					});
+				}
+				if (unityWebRequestAsyncOperation.webRequest.isHttpError)
+				{
+					Debug.LogWarningFormat("FAILURE CODE: {0} REASON: {1}", new object[]
+					{
+						unityWebRequestAsyncOperation.webRequest.responseCode,
+						(unityWebRequestAsyncOperation.webRequest.downloadHandler != null && !string.IsNullOrEmpty(unityWebRequestAsyncOperation.webRequest.downloadHandler.text)) ? unityWebRequestAsyncOperation.webRequest.downloadHandler.text : "UNKNOWN"
+					});
+				}
+				getUserInfoFailed(null, unityWebRequestAsyncOperation.webRequest.responseCode);
+				return;
+			}
+			Debug.LogFormat("Repsonse Code: {0}", new object[]
+			{
+				unityWebRequestAsyncOperation.webRequest.responseCode
+			});
+			bool flag = false;
+			if (unityWebRequestAsyncOperation.webRequest.downloadHandler != null && unityWebRequestAsyncOperation.webRequest.downloadHandler.text != null)
+			{
+				JSONObject jSONObject = new JSONObject(unityWebRequestAsyncOperation.webRequest.downloadHandler.text, -2, false, false);
+				try
+				{
+					responseData.Populate(jSONObject);
+				}
+				catch (Exception ex)
+				{
+					Debug.LogWarningFormat("Exception parsing reponse data: {0}", new object[]
+					{
+						ex.Message.ToString()
+					});
+					flag = true;
+				    getUserInfoFailed(null, unityWebRequestAsyncOperation.webRequest.responseCode);
+				}
+			}
+			if (!flag)
+			{
+				getUserInfoComplete(responseData, unityWebRequestAsyncOperation.webRequest.responseCode);
+			}
+        }
+
+        public static void getUserInfoComplete(ResponseData responseData, long responseCode){
+            ResponseData.User data = (ResponseData.User)responseData;
+            uConsole.Log($"Display Name: {data.displayName}");
+            uConsole.Log($"ID: {data.id}");
+            uConsole.Log($"Followers: {data.followers}");
+            uConsole.Log($"Platform: {data.platform}");
+            uConsole.Log($"Is banned: {data.isBanned}");
+        }
+        public static void getUserInfoFailed(ResponseData responseData, long responseCode){
+            uConsole.Log($"Failed, response code: {responseCode}");
+        }
+
 
         public static void UpdateSandboxPositionUI(SandboxItem item)
 	    {
@@ -642,10 +862,11 @@ namespace ConsoleMod
 
         [HarmonyPatch(typeof(SandboxSelectionSet), "ConstrainTargetPos")]
         private static class ConstrainTargetPosPatch {
-            private static void Prefix(SandboxItem item, Vector3 currentPos, Vector3 targetPos, Vector3 __result){
-                //if (constrainMovement.Value) return true;
-                //__result = targetPos;
-                //return false;
+            private static bool Prefix(SandboxItem item, Vector3 currentPos, Vector3 targetPos, ref Vector3 __result){
+                if (constrainMovement.Value) return true;
+                targetPos.z = 0;
+                __result = targetPos;
+                return false;
             }
         }
 
