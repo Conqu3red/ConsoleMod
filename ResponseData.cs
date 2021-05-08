@@ -190,7 +190,7 @@ namespace ConsoleMod
 				this.displayName = base.ParseStringSafe(jSONObject, "display_name");
                 this.platform = base.ParseStringSafe(jSONObject, "platform");
                 this.followers = base.ParseIntSafe(jSONObject, "followers");
-                this.isBanned = base.ParseBoolSafe(jSONObject, "id_banned");
+                this.isBanned = base.ParseBoolSafe(jSONObject, "is_banned");
             }
 
 			public User()
