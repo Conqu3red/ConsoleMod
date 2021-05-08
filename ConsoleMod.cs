@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using BepInEx;
 using Logger = BepInEx.Logging.Logger;
 using PolyTechFramework;
@@ -181,15 +181,20 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("cin_mode", new uConsole.DebugCommand(cin_mode));
 
                 // custom shape modifiers
+
+                uConsole.RegisterCommand("get_values", new uConsole.DebugCommand(get_values));
                 
+                uConsole.RegisterCommand("get_pos", new uConsole.DebugCommand(get_pos));
                 uConsole.RegisterCommand("set_pos", new uConsole.DebugCommand(set_pos));
                 uConsole.RegisterCommand("add_pos", new uConsole.DebugCommand(add_pos));
                 uConsole.RegisterCommand("shuffle_pos", new uConsole.DebugCommand(shuffle_pos));
                 
+                uConsole.RegisterCommand("get_scale", new uConsole.DebugCommand(get_scale));
                 uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
                 uConsole.RegisterCommand("add_scale", new uConsole.DebugCommand(add_scale));
                 uConsole.RegisterCommand("shuffle_scale", new uConsole.DebugCommand(shuffle_scale));
 
+                uConsole.RegisterCommand("get_rot", new uConsole.DebugCommand(get_rot));
                 uConsole.RegisterCommand("set_rot", new uConsole.DebugCommand(set_rot));
                 uConsole.RegisterCommand("add_rot", new uConsole.DebugCommand(add_rot));
                 uConsole.RegisterCommand("shuffle_rot", new uConsole.DebugCommand(shuffle_rot));
@@ -358,7 +363,7 @@ namespace ConsoleMod
         {
             uConsoleCommands.ShowVersion();
             uConsole.Log(PluginName + " | Version " + PluginVersion);
-            uConsole.Log("Mod Created by Conqu3red");
+            uConsole.Log("Mod Created by Conqu3red, With Small Modifications by Mason");
         }
 
         private static void toggleCheat(){
@@ -563,6 +568,7 @@ namespace ConsoleMod
 	    }
 
         public enum SandboxCommandType {
+            GET,
             SET,
             ADD,
             SHUFFLE
@@ -573,7 +579,7 @@ namespace ConsoleMod
             if (commandType == SandboxCommandType.SHUFFLE){
                 float start, end;
                 if (uConsole.GetNumParameters() == 0 || uConsole.GetNumParameters() == 2){
-                    uConsole.Log($"Usage:\n{commandName} <axis> <value>");
+                    uConsole.Log($"Usage:\n\t{commandName} <axis> <value>");
                     return;
                 }
                 start = uConsole.GetFloat();
@@ -584,13 +590,30 @@ namespace ConsoleMod
                 if (axis == "y") y = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
                 if (axis == "z") z = UnityEngine.Random.Range(Math.Min(start, end), Math.Max(start, end));
 
+            }
+            else if (commandType == SandboxCommandType.GET){
+                if (uConsole.GetNumParameters() > 0){
+                    uConsole.Log($"Usage:\n\t{commandName}");
+                    return;
                 }
+
+                if (SandboxSelectionSet.m_Items.Count > 1){
+                    uConsole.Log($"{commandName} will not work if more than one object is selected.");
+                    return;
+                }
+                if (SandboxSelectionSet.m_Items.Count == 0){
+                    uConsole.Log($"Please select an object, then run this command again.");
+                    return;
+                }
+
+                getValues(commandName);
+            }
             else {
                 if (
                     (!uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 2) ||
                     (uConsole.NextParameterIsFloat() && uConsole.GetNumParameters() < 3)
                 ){
-                    uConsole.Log($"Usage:\n{commandName} <axis> <value>\n{commandName} <x> <y> <z>");
+                    uConsole.Log($"Usage:\n\t{commandName} <axis> <value>\n\t{commandName} <x> <y> <z>");
                     return;
                 }
                 if (!uConsole.NextParameterIsFloat()){
@@ -619,6 +642,21 @@ namespace ConsoleMod
 
         }
 
+        private static void getValues(string commandName){
+            SandboxItem sandboxItem = SandboxSelectionSet.m_Items[0];
+            if (commandName.EndsWith("pos")){
+                uConsole.Log($"\t({sandboxItem.transform.position.x}, {sandboxItem.transform.position.y}, {sandboxItem.transform.position.z})");
+            }
+            else if (commandName.EndsWith("scale")){
+                uConsole.Log($"\t({sandboxItem.transform.localScale.x}, {sandboxItem.transform.localScale.y}, {sandboxItem.transform.localScale.z})");
+            }
+            else if (commandName.EndsWith("rot")){
+                uConsole.Log($"\t({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)");
+            }
+            else {
+                uConsole.Log($"Position:\n\t({sandboxItem.transform.position.x}, {sandboxItem.transform.position.y}, {sandboxItem.transform.position.z})\nScale:\n\t({sandboxItem.transform.localScale.x}, {sandboxItem.transform.localScale.y}, {sandboxItem.transform.localScale.z})\nRotation:\n\t({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)");
+            }
+        }
         private static void changePos(Vector3 pos, SandboxCommandType commandType){
             
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
@@ -641,7 +679,7 @@ namespace ConsoleMod
                 }
                 
                 sandboxItem.transform.position = new_pos;
-                uConsole.Log(orig_pos + " -> " + sandboxItem.gameObject.transform.position.ToString());
+                uConsole.Log($"\t{orig_pos} -> {sandboxItem.gameObject.transform.position.ToString()}");
                 
                 if (sandboxItem.m_Type == SandboxItemType.ANCHOR || sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE)
 			    {
@@ -685,7 +723,7 @@ namespace ConsoleMod
                     }
 
                     sandboxItem.transform.localScale = new_scale;
-                    uConsole.Log(orig_scale + " -> " + sandboxItem.gameObject.transform.localScale.ToString());
+                    uConsole.Log($"\t{orig_scale} -> {sandboxItem.gameObject.transform.localScale.ToString()}");
 
                     if (sandboxItem.m_Type == SandboxItemType.ANCHOR || sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE)
 			        {
@@ -709,7 +747,7 @@ namespace ConsoleMod
                 SandboxItem sandboxItem = SandboxSelectionSet.m_Items[i];
                 
                 if (sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE || sandboxItem.m_Type == SandboxItemType.VEHICLE){
-                    string orig_rot = sandboxItem.transform.rotation.eulerAngles.ToString();
+                    string orig_rot = $"({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)";
                     Quaternion new_rot;
                     if (commandType == SandboxCommandType.ADD){
                         new_rot = Quaternion.Euler(
@@ -726,7 +764,7 @@ namespace ConsoleMod
                         );
                     }
                     sandboxItem.transform.rotation = new_rot;
-                    uConsole.Log(orig_rot + " -> " + sandboxItem.gameObject.transform.rotation.eulerAngles.ToString());
+                    uConsole.Log($"\t{orig_rot} -> ({sandboxItem.gameObject.transform.rotation.eulerAngles.x}°, {sandboxItem.gameObject.transform.rotation.eulerAngles.y}°, {sandboxItem.gameObject.transform.rotation.eulerAngles.z}°)");
                 }
                 if (sandboxItem.m_Type == SandboxItemType.ANCHOR || sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE)
 			    {
@@ -747,7 +785,7 @@ namespace ConsoleMod
                 CustomShape sandboxItem = SandboxSelectionSet.m_Items[i].GetComponent<CustomShape>();
                 
                 if (sandboxItem){
-                    string orig_color = sandboxItem.transform.rotation.ToString();
+                    string orig_color = $"(R{sandboxItem.m_Color.r}, G{sandboxItem.m_Color.g}, B{sandboxItem.m_Color.b}, A{sandboxItem.m_Color.a})";
                     Color new_color;
                     if (commandType == SandboxCommandType.ADD){
                         new_color = new Color(
@@ -765,13 +803,25 @@ namespace ConsoleMod
                     }
                     sandboxItem.SetColor(new_color);
 			        sandboxItem.m_OriginalColor = new_color;
-                    uConsole.Log(orig_color + " -> " + new_color.ToString());
+                    uConsole.Log($"\t{orig_color} -> (R{sandboxItem.m_Color.r}, G{sandboxItem.m_Color.g}, B{sandboxItem.m_Color.b}, A{sandboxItem.m_Color.a})");
                 }
             }
         }
           
         
-        
+
+        private static void get_values(){
+            // Usage:
+            // get_values
+            processSandboxCommand("get_values", SandboxCommandType.GET);
+        }
+
+        private static void get_pos(){
+            // Usage:
+            // get_pos
+            processSandboxCommand("get_pos", SandboxCommandType.GET);
+        }
+
         private static void set_pos(){
             // Usage:
             // set_pos <axis> <value>
@@ -790,6 +840,13 @@ namespace ConsoleMod
             // Usage:
             // shuffle_pos <axis> <start> <end>
             processSandboxCommand("shuffle_pos", SandboxCommandType.SHUFFLE);
+        }
+
+        private static void get_scale(){
+            // Usage:
+            // get_scale
+            processSandboxCommand("get_scale", SandboxCommandType.GET);
+            
         }
 
         private static void set_scale(){
@@ -812,6 +869,12 @@ namespace ConsoleMod
             // shuffle_scale <axis> <start> <end>
             processSandboxCommand("shuffle_scale", SandboxCommandType.SHUFFLE);
             
+        }
+        
+        private static void get_rot(){
+            // Usage:
+            // get_rot
+            processSandboxCommand("get_rot", SandboxCommandType.GET);
         }
 
         private static void set_rot(){
@@ -839,13 +902,13 @@ namespace ConsoleMod
             // Usage:
             // set_color <hex_color>
             if (uConsole.GetNumParameters() != 1){
-                uConsole.Log("Usage: set_color <hex_color>");
+                uConsole.Log("Usage:\n\tset_color <#hex_color>");
                 return;
             }
             string hex_color = uConsole.GetString();
             Color color;
             if (!ColorUtility.TryParseHtmlString(hex_color, out color)){
-                uConsole.Log("Usage: set_color <hex_color>");
+                uConsole.Log("Usage:\n\tset_color <#hex_color>");
                 return;
             }
             changeColor(color, SandboxCommandType.SET);
@@ -1371,7 +1434,7 @@ namespace ConsoleMod
             }
             if (uConsole.GetNumParameters() != 1)
             {
-                uConsole.Log("Usage is cin_duration <seconds>");
+                uConsole.Log("Usage:\n\tcin_duration <seconds>");
             }
             ModdedCinemaCamera.duration = uConsole.GetFloat();
         }
@@ -1455,7 +1518,7 @@ namespace ConsoleMod
             {
                 if (uConsole.GetNumParameters() != 1)
                 {
-                    uConsole.Log("Usage: vehicle_show_polygon_shapes [true | false]");
+                    uConsole.Log("Usage:\n\tvehicle_show_polygon_shapes [true | false]");
                     return;
                 }
                 Bridge.m_DebugVisualizePolygonShapesForVehicles = uConsole.GetBool();
