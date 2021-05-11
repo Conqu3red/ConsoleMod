@@ -199,6 +199,7 @@ namespace ConsoleMod
                 uConsole.RegisterCommand("add_rot", new uConsole.DebugCommand(add_rot));
                 uConsole.RegisterCommand("shuffle_rot", new uConsole.DebugCommand(shuffle_rot));
 
+                uConsole.RegisterCommand("get_color", new uConsole.DebugCommand(get_color));
                 uConsole.RegisterCommand("set_color", new uConsole.DebugCommand(set_color));
 
                 uConsole.RegisterCommand("create_concrete_pillar", new uConsole.DebugCommand(create_support_pillar));
@@ -605,8 +606,15 @@ namespace ConsoleMod
                     uConsole.Log($"Please select an object, then run this command again.");
                     return;
                 }
-
-                getValues(commandName);
+                if (commandName.EndsWith("color")){
+                    CustomShape sandboxItem = SandboxSelectionSet.m_Items[0].GetComponent<CustomShape>();
+                    if (sandboxItem){
+                        getColor();
+                    }
+                }
+                else {
+                    getValues(commandName);
+                }
             }
             else {
                 if (
@@ -636,14 +644,17 @@ namespace ConsoleMod
             }
 
             Vector3 v = new Vector3(x,y,z);
-            if (commandName.EndsWith("pos")) changePos(v, commandType);
-            if (commandName.EndsWith("scale")) changeScale(v, commandType);
-            if (commandName.EndsWith("rot")) changeRot(v, commandType);
+            if (commandType != SandboxCommandType.GET){
+                if (commandName.EndsWith("pos")) changePos(v, commandType);
+                if (commandName.EndsWith("scale")) changeScale(v, commandType);
+                if (commandName.EndsWith("rot")) changeRot(v, commandType);
+            }
 
         }
 
         private static void getValues(string commandName){
             SandboxItem sandboxItem = SandboxSelectionSet.m_Items[0];
+            CustomShape customShape = SandboxSelectionSet.m_Items[0].GetComponent<CustomShape>();
             if (commandName.EndsWith("pos")){
                 uConsole.Log($"\t({sandboxItem.transform.position.x}, {sandboxItem.transform.position.y}, {sandboxItem.transform.position.z})");
             }
@@ -654,9 +665,25 @@ namespace ConsoleMod
                 uConsole.Log($"\t({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)");
             }
             else {
-                uConsole.Log($"Position:\n\t({sandboxItem.transform.position.x}, {sandboxItem.transform.position.y}, {sandboxItem.transform.position.z})\nScale:\n\t({sandboxItem.transform.localScale.x}, {sandboxItem.transform.localScale.y}, {sandboxItem.transform.localScale.z})\nRotation:\n\t({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)");
+
+                if (customShape){
+                    uConsole.Log($"Position:\n\t({sandboxItem.transform.position.x}, {sandboxItem.transform.position.y}, {sandboxItem.transform.position.z})\nScale:\n\t({sandboxItem.transform.localScale.x}, {sandboxItem.transform.localScale.y}, {sandboxItem.transform.localScale.z})\nRotation:\n\t({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)\nColor:\n\t(R{customShape.m_Color.r}, G{customShape.m_Color.g}, B{customShape.m_Color.b}, A{customShape.m_Color.a})");
+                }
+                else {
+                    uConsole.Log($"Position:\n\t({sandboxItem.transform.position.x}, {sandboxItem.transform.position.y}, {sandboxItem.transform.position.z})\nScale:\n\t({sandboxItem.transform.localScale.x}, {sandboxItem.transform.localScale.y}, {sandboxItem.transform.localScale.z})\nRotation:\n\t({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)");
+                }
             }
         }
+
+        private static void getColor(){
+
+            CustomShape sandboxItem = SandboxSelectionSet.m_Items[0].GetComponent<CustomShape>();
+
+            if (sandboxItem){
+                uConsole.Log($"(R{sandboxItem.m_Color.r}, G{sandboxItem.m_Color.g}, B{sandboxItem.m_Color.b}, A{sandboxItem.m_Color.a})");
+            }
+        }
+
         private static void changePos(Vector3 pos, SandboxCommandType commandType){
             
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
@@ -896,6 +923,12 @@ namespace ConsoleMod
             // shuffle_rot <axis> <value>
             // shuffle_rot <x> <y> <z>
             processSandboxCommand("shuffle_rot", SandboxCommandType.SHUFFLE);
+        }
+
+        private static void get_color(){
+            // Usage:
+            // get_color
+            processSandboxCommand("get_color", SandboxCommandType.GET);
         }
 
         private static void set_color(){
