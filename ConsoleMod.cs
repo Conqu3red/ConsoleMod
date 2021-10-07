@@ -951,9 +951,10 @@ namespace ConsoleMod
             string prefabName = "ConcretePillar_Prefab";
             if (GameStateManager.GetState() != GameState.SANDBOX) return;
             Vector3 pos = Cameras.MainCamera().ScreenToWorldPoint(Input.mousePosition);
+            pos[2] = 1500f;
             SupportPillar pillar = SupportPillars.CreateSupportPillar(Prefabs.m_PrefabsDict[prefabName], pos, new Quaternion(0,0,0,1));
             UpdateSandboxPositionUI(pillar.m_SandboxItem);
-            uConsole.Log("Created concrete pillar at mouse position");
+            uConsole.Log($"Created concrete pillar at mouse position ({pos[0]}, {pos[1]}, {pos[2]})");
         }
 
         [HarmonyPatch(typeof(SandboxSelectionSet), "ConstrainTargetPos")]
