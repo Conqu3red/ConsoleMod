@@ -7,15 +7,11 @@ using HarmonyLib;
 using System.Reflection;
 using System.Collections.Generic;
 using BepInEx.Configuration;
-using PolyPhysics.Viewers;
 using Poly.Physics;
 using Poly.Math;
 using PolyPhysics;
 using Common.Class;
 using Common.Extension;
-using TMPro;
-using UnityEngine.UI;
-using Vectrosity;
 using UnityEngine.Networking;
 //using UnityEngine.UnityWebRequestModule;
 
@@ -31,7 +27,7 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.3.2";
+            PluginVersion = "0.3.3";
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
             recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
@@ -50,6 +46,7 @@ namespace ConsoleMod
         public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut>
             stepFrame;
         public static ConfigEntry<float> movementPrecision;
+        public static ConfigEntry<int> budgetAccuracy;
 
         public static ConsoleMod instance;
 
@@ -84,9 +81,11 @@ namespace ConsoleMod
             constrainMovement = Config.Bind("Miscellaneous", "Contrain Movement", true, "Whether or not to constrain sandbox item movement (pb2 default is true)");
             superZoom = Config.Bind("Miscellaneous", "Super Zoom", false, "Infinite Camera Zoom");
             movementPrecision = Config.Bind("Miscellaneous", "Movement Precision", 0.01f, "Node Movement Precision");
-            
+            budgetAccuracy = Config.Bind("Miscellaneous", "Budget Accuraccy", 0, "Number of decimal places to display budget to");
+
             consoleShortcut = Config.Bind("Console", "Console Keybind", new BepInEx.Configuration.KeyboardShortcut(KeyCode.BackQuote), "Keybind to open the console");
             consoleShortcut.SettingChanged += (o, e) => {uConsole.m_Instance.m_Activate = consoleShortcut.Value.MainKey;};
+
 
             harmony = new Harmony("org.bepinex.plugins.ConsoleMod");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -188,6 +187,7 @@ namespace ConsoleMod
                 
                 uConsole.RegisterCommand("set_scale", new uConsole.DebugCommand(set_scale));
                 uConsole.RegisterCommand("add_scale", new uConsole.DebugCommand(add_scale));
+                uConsole.RegisterCommand("multiply_scale", new uConsole.DebugCommand(multiply_scale));
                 uConsole.RegisterCommand("shuffle_scale", new uConsole.DebugCommand(shuffle_scale));
 
                 uConsole.RegisterCommand("set_rot", new uConsole.DebugCommand(set_rot));
@@ -565,7 +565,38 @@ namespace ConsoleMod
         public enum SandboxCommandType {
             SET,
             ADD,
-            SHUFFLE
+            MULTIPY,
+            SHUFFLE,
+        }
+
+        private static Vector3 setVec3(Vector3 initial, Vector3 pos) {
+            return new Vector3(
+                pos.x == -1e16f ? initial.x : pos.x,
+                pos.y == -1e16f ? initial.y : pos.y,
+                pos.z == -1e16f ? initial.z : pos.z
+            );
+        }
+        private static Vector3 addVec3(Vector3 initial, Vector3 pos) {
+            return new Vector3(
+                pos.x == -1e16f ? initial.x : initial.x + pos.x,
+                pos.y == -1e16f ? initial.y : initial.y + pos.y,
+                pos.z == -1e16f ? initial.z : initial.z + pos.z
+            );
+        }
+        private static Vector3 mulVec3(Vector3 initial, Vector3 pos) {
+            return new Vector3(
+                pos.x == -1e16f ? initial.x : initial.x * pos.x,
+                pos.y == -1e16f ? initial.y : initial.y * pos.y,
+                pos.z == -1e16f ? initial.z : initial.z * pos.z
+            );
+        }
+        private static Vector3 applyVecChange(Vector3 initial, Vector3 pos, SandboxCommandType commandType) {
+            switch (commandType) {
+                case SandboxCommandType.SET: return setVec3(initial, pos);
+                case SandboxCommandType.ADD: return addVec3(initial, pos);
+                case SandboxCommandType.MULTIPY: return mulVec3(initial, pos);
+                default: return Vector3.zero;
+            }
         }
         private static void processSandboxCommand(string commandName, SandboxCommandType commandType){
             float x = -1e16f, y = -1e16f, z = -1e16f;
@@ -623,24 +654,14 @@ namespace ConsoleMod
             
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 SandboxItem sandboxItem = SandboxSelectionSet.m_Items[i];
-                Vector3 new_pos;
                 string orig_pos = sandboxItem.transform.position.ToString();
-                if (commandType == SandboxCommandType.ADD){
-                    new_pos = new Vector3(
-                        pos.x == -1e16f ? sandboxItem.transform.position.x : sandboxItem.transform.position.x + pos.x, 
-                        pos.y == -1e16f ? sandboxItem.transform.position.y : sandboxItem.transform.position.y + pos.y, 
-                        pos.z == -1e16f ? sandboxItem.transform.position.z : sandboxItem.transform.position.z + pos.z
-                    );
-                }
-                else {
-                    new_pos = new Vector3(
-                        pos.x == -1e16f ? sandboxItem.transform.position.x : pos.x, 
-                        pos.y == -1e16f ? sandboxItem.transform.position.y : pos.y, 
-                        pos.z == -1e16f ? sandboxItem.transform.position.z : pos.z
-                    );
-                }
                 
-                sandboxItem.transform.position = new_pos;
+                sandboxItem.transform.position = applyVecChange(
+                    sandboxItem.transform.position,
+                    pos,
+                    commandType
+                );
+                
                 uConsole.Log(orig_pos + " -> " + sandboxItem.gameObject.transform.position.ToString());
                 
                 if (sandboxItem.m_Type == SandboxItemType.ANCHOR || sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE)
@@ -667,22 +688,13 @@ namespace ConsoleMod
                     sandboxItem.m_Type == SandboxItemType.FLYING_OBJECT ||
                     sandboxItem.m_Type == SandboxItemType.SUPPORT_PILLAR
                 ){
-                    Vector3 new_scale;
                     string orig_scale = sandboxItem.transform.localScale.ToString();
-                    if (commandType == SandboxCommandType.ADD){
-                        new_scale = new Vector3(
-                            scale.x == -1e16f ? sandboxItem.transform.localScale.x : sandboxItem.transform.localScale.x + scale.x, 
-                            scale.y == -1e16f ? sandboxItem.transform.localScale.y : sandboxItem.transform.localScale.y + scale.y, 
-                            scale.z == -1e16f ? sandboxItem.transform.localScale.z : sandboxItem.transform.localScale.z + scale.z
-                        );
-                    }
-                    else {
-                        new_scale = new Vector3(
-                            scale.x == -1e16f ? sandboxItem.transform.localScale.x : scale.x, 
-                            scale.y == -1e16f ? sandboxItem.transform.localScale.y : scale.y, 
-                            scale.z == -1e16f ? sandboxItem.transform.localScale.z : scale.z
-                        );
-                    }
+                    
+                    Vector3 new_scale = applyVecChange(
+                        sandboxItem.transform.localScale,
+                        scale,
+                        commandType
+                    );
 
                     sandboxItem.transform.localScale = new_scale;
                     uConsole.Log(orig_scale + " -> " + sandboxItem.gameObject.transform.localScale.ToString());
@@ -710,21 +722,13 @@ namespace ConsoleMod
                 
                 if (sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE || sandboxItem.m_Type == SandboxItemType.VEHICLE){
                     string orig_rot = sandboxItem.transform.rotation.eulerAngles.ToString();
-                    Quaternion new_rot;
-                    if (commandType == SandboxCommandType.ADD){
-                        new_rot = Quaternion.Euler(
-                            x == -1e16f ? sandboxItem.transform.rotation.eulerAngles.x : sandboxItem.transform.rotation.eulerAngles.x + x, 
-                            y == -1e16f ? sandboxItem.transform.rotation.eulerAngles.y : sandboxItem.transform.rotation.eulerAngles.y + y, 
-                            z == -1e16f ? sandboxItem.transform.rotation.eulerAngles.z : sandboxItem.transform.rotation.eulerAngles.z + z
-                        );
-                    }
-                    else {
-                        new_rot = Quaternion.Euler(
-                            x == -1e16f ? sandboxItem.transform.rotation.eulerAngles.x : x, 
-                            y == -1e16f ? sandboxItem.transform.rotation.eulerAngles.y : y, 
-                            z == -1e16f ? sandboxItem.transform.rotation.eulerAngles.z : z
-                        );
-                    }
+                    
+                    Quaternion new_rot = Quaternion.Euler(applyVecChange(
+                        sandboxItem.transform.rotation.eulerAngles,
+                        rot,
+                        commandType
+                    ));
+
                     sandboxItem.transform.rotation = new_rot;
                     uConsole.Log(orig_rot + " -> " + sandboxItem.gameObject.transform.rotation.eulerAngles.ToString());
                 }
@@ -741,28 +745,27 @@ namespace ConsoleMod
             }
         }
 
+        private static Vector3 ColorToVector3(Color color) {
+            return new Vector3(color.r, color.g, color.b);
+        }
+
+        private static Color Vector3ToColor(Vector3 vec3) {
+            return new Color(vec3.x, vec3.y, vec3.z);
+        }
+
         public static void changeColor(Color color, SandboxCommandType commandType){
             
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 CustomShape sandboxItem = SandboxSelectionSet.m_Items[i].GetComponent<CustomShape>();
                 
                 if (sandboxItem){
-                    string orig_color = sandboxItem.transform.rotation.ToString();
-                    Color new_color;
-                    if (commandType == SandboxCommandType.ADD){
-                        new_color = new Color(
-                            color.r == -1e16f ? sandboxItem.m_Color.r : sandboxItem.m_Color.r + color.r, 
-                            color.g == -1e16f ? sandboxItem.m_Color.g : sandboxItem.m_Color.g + color.g, 
-                            color.b == -1e16f ? sandboxItem.m_Color.b : sandboxItem.m_Color.b + color.b
-                        );
-                    }
-                    else {
-                        new_color = new Color(
-                            color.r == -1e16f ? sandboxItem.m_Color.r : color.r, 
-                            color.g == -1e16f ? sandboxItem.m_Color.g : color.g, 
-                            color.b == -1e16f ? sandboxItem.m_Color.b : color.b
-                        );
-                    }
+                    string orig_color = sandboxItem.m_Color.ToString();
+                    Color new_color = Vector3ToColor(applyVecChange(
+                        ColorToVector3(sandboxItem.m_Color),
+                        ColorToVector3(color),
+                        commandType
+                    ));
+                    
                     sandboxItem.SetColor(new_color);
 			        sandboxItem.m_OriginalColor = new_color;
                     uConsole.Log(orig_color + " -> " + new_color.ToString());
@@ -806,6 +809,14 @@ namespace ConsoleMod
             // add_scale <x> <y> <z>
             processSandboxCommand("add_scale", SandboxCommandType.ADD);
         }
+        private static void multiply_scale(){
+            // Usage:
+            // add_scale <axis> <value>
+            // add_scale <x> <y> <z>
+            processSandboxCommand("multiply_scale", SandboxCommandType.MULTIPY);
+        }
+
+
 
         private static void shuffle_scale(){
             // Usage:
@@ -867,6 +878,16 @@ namespace ConsoleMod
                 targetPos.z = 0;
                 __result = targetPos;
                 return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Panel_TopBar), "UpdateBridgeCost")]
+        private static class budgetAccuracyPatch {
+            private static void Postfix(Panel_TopBar __instance) {
+                if (budgetAccuracy.Value != 0) {
+                    string fmt = $"${{0:n{budgetAccuracy.Value}}}";
+                    __instance.m_CostText.text = string.Format(fmt, Budget.m_BridgeCost);
+                }
             }
         }
 
