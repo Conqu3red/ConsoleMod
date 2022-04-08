@@ -85,7 +85,7 @@ namespace ConsoleMod
             movementPrecision = Config.Bind("Miscellaneous", "Movement Precision", 0.01f, "Node Movement Precision");
             budgetAccuracy = Config.Bind("Miscellaneous", "Budget Accuracy", 0, "Number of decimal places to display budget to");
 
-            rampAnarchy = Config.Bind("Ramp Anarchy", "Contrain Ramp Nodes", true, "(pb2 default is true)");
+            rampAnarchy = Config.Bind("Ramp Anarchy", "Constrain Ramp Nodes", true, "(pb2 default is true)");
             rampSnap = Config.Bind("Ramp Anarchy", "Snap Ramp Nodes to grid", false, "Only effected if ramp anarchy is on");
             
             
