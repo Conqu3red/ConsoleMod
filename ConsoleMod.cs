@@ -27,7 +27,7 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.3.3";
+            PluginVersion = "0.3.4";
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
             recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
@@ -42,7 +42,9 @@ namespace ConsoleMod
             PauseOnSimStart,
             instantTrace,
             constrainMovement,
-            superZoom;
+            superZoom,
+            rampAnarchy,
+            rampSnap;
         public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut>
             stepFrame;
         public static ConfigEntry<float> movementPrecision;
@@ -81,8 +83,12 @@ namespace ConsoleMod
             constrainMovement = Config.Bind("Miscellaneous", "Contrain Movement", true, "Whether or not to constrain sandbox item movement (pb2 default is true)");
             superZoom = Config.Bind("Miscellaneous", "Super Zoom", false, "Infinite Camera Zoom");
             movementPrecision = Config.Bind("Miscellaneous", "Movement Precision", 0.01f, "Node Movement Precision");
-            budgetAccuracy = Config.Bind("Miscellaneous", "Budget Accuraccy", 0, "Number of decimal places to display budget to");
+            budgetAccuracy = Config.Bind("Miscellaneous", "Budget Accuracy", 0, "Number of decimal places to display budget to");
 
+            rampAnarchy = Config.Bind("Ramp Anarchy", "Contrain Ramp Nodes", true, "(pb2 default is true)");
+            rampSnap = Config.Bind("Ramp Anarchy", "Snap Ramp Nodes to grid", false, "Only effected if ramp anarchy is on");
+            
+            
             consoleShortcut = Config.Bind("Console", "Console Keybind", new BepInEx.Configuration.KeyboardShortcut(KeyCode.BackQuote), "Keybind to open the console");
             consoleShortcut.SettingChanged += (o, e) => {uConsole.m_Instance.m_Activate = consoleShortcut.Value.MainKey;};
 
@@ -201,6 +207,10 @@ namespace ConsoleMod
 
                 uConsole.RegisterCommand("get_color", new uConsole.DebugCommand(get_color));
                 uConsole.RegisterCommand("set_color", new uConsole.DebugCommand(set_color));
+
+                // ramps
+                uConsole.RegisterCommand("set_ramp_type", new uConsole.DebugCommand(set_ramp_type));
+
 
                 uConsole.RegisterCommand("create_concrete_pillar", new uConsole.DebugCommand(create_support_pillar));
                 uConsole.RegisterCommand("user_info", new uConsole.DebugCommand(getUserInfo));
@@ -958,6 +968,25 @@ namespace ConsoleMod
             changeColor(color, SandboxCommandType.SET);
         }
 
+        private static void set_ramp_type() {
+            if (uConsole.GetNumParameters() != 1) {
+                uConsole.Log("Usage:\n\tset_ramp_type <type (0, 1, 2, 3)>");
+                uConsole.Log("0 = Hermite, 1 = BSpline, 2 = Bezier, 3 = Linear");
+                return;
+            }
+
+            var type = (Dreamteck.Splines.Spline.Type)uConsole.GetInt();
+
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                Ramp sandboxItem = SandboxSelectionSet.m_Items[i].GetComponent<Ramp>();
+
+                if (sandboxItem){
+                    uConsole.Log($"{sandboxItem.m_SplineType} -> {type}");
+                    sandboxItem.SetSplineType(type);
+                }
+            }
+        }
+
         private static void create_support_pillar(){
             string prefabName = "ConcretePillar_Prefab";
             if (GameStateManager.GetState() != GameState.SANDBOX) return;
@@ -971,9 +1000,55 @@ namespace ConsoleMod
         [HarmonyPatch(typeof(SandboxSelectionSet), "ConstrainTargetPos")]
         private static class ConstrainTargetPosPatch {
             private static bool Prefix(SandboxItem item, Vector3 currentPos, Vector3 targetPos, ref Vector3 __result){
-                if (constrainMovement.Value) return true;
+                if (constrainMovement.Value || !modEnabled.Value) return true;
                 targetPos.z = 0;
                 __result = targetPos;
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Panel_SandboxEditRampSpline), "MoveControlPointWithMouse")]
+        private static class ConstrainRampSplinePatch {
+            private static bool Prefix(
+                Panel_SandboxEditRampSpline __instance, Vector2 mouseScreenPos,
+                bool ___m_SelectedSplineControlPointFollowsMouse,
+                SplineControlPoint ___m_SelectedSplineControlPoint,
+                Vector2 ___m_OffsetFromPointer
+            ) {
+                if (rampAnarchy.Value || !modEnabled.Value) return true;
+
+                if (!___m_SelectedSplineControlPointFollowsMouse || !___m_SelectedSplineControlPoint)
+                {
+                    return false;
+                }
+                Ramp component = ___m_SelectedSplineControlPoint.transform.parent.gameObject.GetComponent<Ramp>();
+                if (!component)
+                {
+                    return false;
+                }
+                int num = component.m_ControlPoints.IndexOf(___m_SelectedSplineControlPoint);
+                if (num == -1)
+                {
+                    return false;
+                }
+                Vector3 vector = Cameras.MainCamera().ScreenToWorldPoint(___m_OffsetFromPointer + mouseScreenPos);
+                if (rampSnap.Value)
+                {
+                    vector = GameUI.SnapPosToGrid(vector);
+                }
+                float min =  float.MinValue;
+                float max = float.MaxValue;
+                vector = new Vector3(Mathf.Clamp(vector.x, min, max), vector.y, vector.z);
+                vector = Utils.V3toV2(vector - component.transform.position) + Utils.V3toV2(component.transform.position);
+                ___m_SelectedSplineControlPoint.transform.position = Utils.V2toV3(vector);
+                component.m_SplineComputer.SetPointPosition(
+                    component.m_ControlPoints.IndexOf(___m_SelectedSplineControlPoint),
+                    ___m_SelectedSplineControlPoint.transform.position,
+                    Dreamteck.Splines.SplineComputer.Space.World
+                );
+                component.RecalulateNumSegments();
+                component.RefreshMesh();
+
                 return false;
             }
         }
