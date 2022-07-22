@@ -27,7 +27,7 @@ namespace ConsoleMod
         public new const string
             PluginGuid = "org.bepinex.plugins.ConsoleMod",
             PluginName = "Console Mod",
-            PluginVersion = "0.3.4";
+            PluginVersion = "0.4.0";
         public static ConfigDefinition
             modEnabledDef = new ConfigDefinition("Console", "Enable/Disable Mod"),
             recenterEnabledDef = new ConfigDefinition("Console", "Enable/Disable Recenter button"),
@@ -43,6 +43,7 @@ namespace ConsoleMod
             instantTrace,
             constrainMovement,
             superZoom,
+            moreStress,
             rampAnarchy,
             rampSnap;
         public static ConfigEntry<BepInEx.Configuration.KeyboardShortcut>
@@ -82,6 +83,7 @@ namespace ConsoleMod
             instantTrace = Config.Bind("Miscellaneous", "Instant Trace Fill", false, "If enabled makes the trace tool fill instantly");
             constrainMovement = Config.Bind("Miscellaneous", "Contrain Movement", true, "Whether or not to constrain sandbox item movement (pb2 default is true)");
             superZoom = Config.Bind("Miscellaneous", "Super Zoom", false, "Infinite Camera Zoom");
+            moreStress = Config.Bind("Miscellaneous", "More Stress", false, "No stress cap");
             movementPrecision = Config.Bind("Miscellaneous", "Movement Precision", 0.01f, "Node Movement Precision");
             budgetAccuracy = Config.Bind("Miscellaneous", "Budget Accuracy", 0, "Number of decimal places to display budget to");
 
@@ -158,17 +160,19 @@ namespace ConsoleMod
 
 
         [HarmonyPatch(typeof(Main))]
-        [HarmonyPatch("InstantiateGameUI")]
-        //[HarmonyPatch("Awake")]
+        [HarmonyPatch("Awake")]
         public class PatchMain
         {
             static void Postfix()
             {
-                GameObject gameObject = UnityEngine.Object.Instantiate<GameObject>(Main.m_Instance.m_ConsoleUI, Vector3.zero, Quaternion.identity);
-                if (gameObject != null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                    gameObject.name = Main.m_Instance.m_ConsoleUI.name;
+                if (UnityEngine.GameObject.Find(Main.m_Instance.m_ConsoleUI.name) == null) {
+                    instance.Logger.LogInfo("Console not found, creating...");
+                    GameObject gameObject = UnityEngine.Object.Instantiate<GameObject>(Main.m_Instance.m_ConsoleUI, Vector3.zero, Quaternion.identity);
+                    if (gameObject != null)
+                    {
+                        DontDestroyOnLoad(gameObject);
+                        gameObject.name = Main.m_Instance.m_ConsoleUI.name;
+                    }
                 }
                 uConsole.UnRegisterCommand("version");
                 uConsole.RegisterCommand("version", "show uConsole version", new uConsole.DebugCommand(mod_ver));
@@ -207,6 +211,11 @@ namespace ConsoleMod
 
                 uConsole.RegisterCommand("get_color", new uConsole.DebugCommand(get_color));
                 uConsole.RegisterCommand("set_color", new uConsole.DebugCommand(set_color));
+
+                uConsole.RegisterCommand("set_mass", new uConsole.DebugCommand(set_mass));
+
+
+                uConsole.RegisterCommand("set_shape_road_collision", new uConsole.DebugCommand(set_shape_road_collision));
 
                 // ramps
                 uConsole.RegisterCommand("set_ramp_type", new uConsole.DebugCommand(set_ramp_type));
@@ -795,7 +804,11 @@ namespace ConsoleMod
             for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
                 SandboxItem sandboxItem = SandboxSelectionSet.m_Items[i];
                 
-                if (sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE || sandboxItem.m_Type == SandboxItemType.VEHICLE){
+                if (
+                    sandboxItem.m_Type == SandboxItemType.CUSTOM_SHAPE
+                    || sandboxItem.m_Type == SandboxItemType.VEHICLE
+                    || sandboxItem.m_Type == SandboxItemType.ZED_AXIS_VEHICLE
+                ){
                     string orig_rot = $"({sandboxItem.transform.rotation.eulerAngles.x}°, {sandboxItem.transform.rotation.eulerAngles.y}°, {sandboxItem.transform.rotation.eulerAngles.z}°)";
                     
                     Quaternion new_rot = Quaternion.Euler(applyVecChange(
@@ -847,6 +860,21 @@ namespace ConsoleMod
                 }
             }
         }
+
+        public static void changeMass(float mass, SandboxCommandType commandType){
+            mass *= BridgePhysics.PgToKg;
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                CustomShape sandboxItem = SandboxSelectionSet.m_Items[i].GetComponent<CustomShape>();
+                
+                if (sandboxItem){
+                    string orig_mass = Utils.FormatWeight(sandboxItem.m_Mass * BridgePhysics.KgToPg);
+                    string new_mass = Utils.FormatWeight(mass * BridgePhysics.KgToPg);
+                    
+                    sandboxItem.m_Mass = mass;
+                    uConsole.Log($"\t{orig_mass} -> {new_mass}");
+                }
+            }
+        } 
           
         
 
@@ -968,6 +996,36 @@ namespace ConsoleMod
             changeColor(color, SandboxCommandType.SET);
         }
 
+        private static void set_mass() {
+            if (uConsole.GetNumParameters() != 1){
+                uConsole.Log("Usage:\n\tset_mass <mass>");
+                return;
+            }
+            float mass = uConsole.GetFloat();
+            changeMass(mass, SandboxCommandType.SET);
+        }
+
+        private static void set_shape_road_collision() {
+            if (uConsole.GetNumParameters() != 1){
+                uConsole.Log("Usage:\n\tset_shape_road_collision <state>");
+                return;
+            }
+            bool state = uConsole.GetBool();
+            
+            for (var i = 0; i < SandboxSelectionSet.m_Items.Count; i++){
+                CustomShape sandboxItem = SandboxSelectionSet.m_Items[i].GetComponent<CustomShape>();
+                
+                if (sandboxItem){
+                    string orig_state = sandboxItem.m_CollidesWithRoad.ToString();
+                    string new_state = state.ToString();
+
+                    
+                    sandboxItem.m_CollidesWithRoad = state;
+                    uConsole.Log($"\t{orig_state} -> {new_state}");
+                }
+            }
+        }
+
         private static void set_ramp_type() {
             if (uConsole.GetNumParameters() != 1) {
                 uConsole.Log("Usage:\n\tset_ramp_type <type (0, 1, 2, 3)>");
@@ -999,7 +1057,7 @@ namespace ConsoleMod
 
         [HarmonyPatch(typeof(SandboxSelectionSet), "ConstrainTargetPos")]
         private static class ConstrainTargetPosPatch {
-            private static bool Prefix(SandboxItem item, Vector3 currentPos, Vector3 targetPos, ref Vector3 __result){
+            private static bool Prefix(SandboxItem item, Vector3 constraint, Vector3 targetPos, ref Vector3 __result){
                 if (constrainMovement.Value || !modEnabled.Value) return true;
                 targetPos.z = 0;
                 __result = targetPos;
@@ -1060,6 +1118,64 @@ namespace ConsoleMod
                     string fmt = $"${{0:n{budgetAccuracy.Value}}}";
                     __instance.m_CostText.text = string.Format(fmt, Budget.m_BridgeCost);
                 }
+            }
+        }
+
+        [HarmonyPatch(typeof(Poly.Physics.Solver.Solver), "CheckImpulseAccumulatorsForBreakage")]
+        static class stressPatch {
+            static bool Prefix(
+                ref float __result,
+                Poly.Physics.Solver.SolverEdge[] edges,
+                SolverSettings settings
+            ) {
+                if (!moreStress.Value) return true;
+
+                float num = 1f / (settings.deltaTimeForVelocityEdge * settings.deltaTimeForVelocityEdge);
+                PolyPhysics.Utils.Timer.Begin(PolyPhysics.Utils.TimerId.CheckBreakage);
+                float num2 = 0f;
+                for (int i = 0; i < edges.Length; i++)
+                {
+                    ref Poly.Physics.Solver.SolverEdge ptr = ref edges[i];
+                    ptr.sumFullImpulsesInFrame += ptr.sumFullImpulses;
+                    if (!ptr.pin_isUnbreakable)
+                    {
+                        float f = ptr.sumFullImpulsesInFrame / (float)settings.numEdgeIntegrationsPerFrame;
+                        if (ptr.isBroken || ptr.maxImpulsePerIntegration * 0.999999f < Mathf.Abs(f))
+                        {
+                            if (SingletonMonoBehaviour<World>.instance.areEdgesBreakable)
+                            {
+                                ptr.isBroken = true;
+                            }
+                        }
+                        num2 = Mathf.Max(num2, Mathf.Abs(f) / ptr.maxImpulsePerIntegration);
+                    }
+                }
+                PolyPhysics.Utils.Timer.End(PolyPhysics.Utils.TimerId.CheckBreakage);
+                __result = num2;
+
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(StressSamples), "ComputeAverage")]
+        static class stressSamplePatch {
+            static bool Prefix(ref float __result, Queue<float> ___m_StressSamples) {
+                if (!moreStress.Value) return true;
+
+                float num = 0f;
+                foreach (float num2 in ___m_StressSamples)
+                {
+                    num += num2;
+                }
+                if (___m_StressSamples.Count != 0)
+                {
+                    __result = num / (float)___m_StressSamples.Count;
+                }
+                else {
+                    __result = 0f;
+                }
+
+                return false;
             }
         }
 
